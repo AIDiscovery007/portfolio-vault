@@ -117,6 +117,21 @@ export type ImportDraftRow = {
   rawText?: string
   issues?: string[]
   duplicateOf?: string
+  extractedHolding?: {
+    name?: string
+    officialName?: string
+    fundCode?: string
+    currency?: CurrencyCode
+    marketValue?: number
+    holdingPnl?: number
+    holdingPnlPct?: number
+    allocationPct?: number
+    unitNav?: number
+    navDate?: string
+    estimatedShares?: number
+    matchSource?: string
+    matchConfidence?: number
+  }
 }
 
 export type ImportDraft = {
@@ -127,6 +142,7 @@ export type ImportDraft = {
   accountId?: string
   accountConfidence?: number
   rows: ImportDraftRow[]
+  approvedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -310,8 +326,13 @@ export async function approveImportDraft(draftId: string, vaultDir = resolveVaul
 
   if (events.length === 0) throw new Error('No ready rows are available to approve.')
 
+  const approvalTimestamp = now()
+  const config = await readConfig(vaultDir)
+  if (upsertInstrumentsFromDrafts(config, [draft], approvalTimestamp)) {
+    await saveConfig(config, vaultDir)
+  }
   await appendLedgerEvents(events, vaultDir)
-  const approved: ImportDraft = { ...draft, status: 'approved', updatedAt: now() }
+  const approved: ImportDraft = { ...draft, status: 'approved', approvedAt: approvalTimestamp, updatedAt: approvalTimestamp }
   await writeJsonAtomic(draftPath, approved)
   await rebuildDerived(vaultDir)
   return approved
@@ -331,8 +352,19 @@ function normalizeLedgerEvent(input: Partial<LedgerEvent>, sourceBatchId: string
 
 export async function rebuildDerived(vaultDir = resolveVaultDir()) {
   const [config, events, drafts] = await Promise.all([readConfig(vaultDir), readLedgerEvents(vaultDir), listImportDrafts(vaultDir)])
+  let configChanged = upsertInstrumentsFromDrafts(
+    config,
+    drafts.filter((draft) => draft.status === 'approved'),
+    now()
+  )
   const positions = projectPositions(events)
   const cashByAccount = projectCash(events)
+  const inferredBaseCurrency = config.baseCurrency ?? inferBaseCurrency(positions, cashByAccount)
+  if (!config.baseCurrency && inferredBaseCurrency) {
+    config.baseCurrency = inferredBaseCurrency
+    configChanged = true
+  }
+  if (configChanged) await saveConfig(config, vaultDir)
   const summary: PortfolioSummary = {
     vaultDir,
     baseCurrency: config.baseCurrency,
@@ -346,6 +378,88 @@ export async function rebuildDerived(vaultDir = resolveVaultDir()) {
   const { paths: p } = await ensureVault(vaultDir)
   await writeJsonAtomic(p.positions, summary)
   return summary
+}
+
+function upsertInstrumentsFromDrafts(config: VaultConfig, drafts: ImportDraft[], timestamp: string) {
+  const knownIds = new Set(config.instruments.map((instrument) => instrument.id))
+  let changed = false
+
+  for (const draft of drafts) {
+    for (const row of draft.rows) {
+      const event = row.proposedEvent
+      if (!event || !('instrumentId' in event) || !event.instrumentId) continue
+
+      if (knownIds.has(event.instrumentId)) continue
+
+      const holding = row.extractedHolding
+      const symbol = holding?.fundCode ?? inferSymbolFromInstrumentId(event.instrumentId)
+      const name = holding?.officialName ?? holding?.name ?? symbol ?? event.instrumentId
+      const assetClass = holding?.fundCode ? 'fund' : inferAssetClassFromEvent(event.type)
+
+      config.instruments.push({
+        id: event.instrumentId,
+        symbol: symbol ?? event.instrumentId,
+        name,
+        assetClass,
+        currency: holding?.currency ?? event.currency ?? config.baseCurrency ?? 'CNY',
+        market: holding?.fundCode ? inferFundMarket(holding.fundCode) : undefined,
+        tags: holding?.fundCode ? ['imported'] : undefined,
+        notes: holding?.matchSource ? `Imported from draft metadata. Source: ${holding.matchSource}.` : 'Imported from draft metadata.',
+        createdAt: timestamp,
+        updatedAt: timestamp
+      })
+      knownIds.add(event.instrumentId)
+      changed = true
+    }
+  }
+
+  return changed
+}
+
+function inferSymbolFromInstrumentId(instrumentId: string) {
+  const codeMatch = instrumentId.match(/\d{6}/)
+  return codeMatch?.[0] ?? instrumentId
+}
+
+function inferAssetClassFromEvent(type?: string): Instrument['assetClass'] {
+  if (type === 'opening_balance') return 'cash'
+  return 'fund'
+}
+
+function inferFundMarket(fundCode: string) {
+  if (fundCode.startsWith('968')) return 'HK mutual-recognition fund / overseas fund'
+  return 'CN mutual fund'
+}
+
+function inferBaseCurrency(
+  positions: PositionSummary[],
+  cashByAccount: Array<{
+    currency: CurrencyCode
+    balance: number
+  }>
+) {
+  const totals = new Map<CurrencyCode, number>()
+  const fallback = positions[0]?.currency ?? cashByAccount[0]?.currency ?? null
+
+  for (const position of positions) {
+    const value = Math.abs(position.marketValue ?? position.costAmount)
+    totals.set(position.currency, (totals.get(position.currency) ?? 0) + value)
+  }
+
+  for (const cash of cashByAccount) {
+    totals.set(cash.currency, (totals.get(cash.currency) ?? 0) + Math.abs(cash.balance))
+  }
+
+  let bestCurrency: CurrencyCode | null = null
+  let bestValue = 0
+  for (const [currency, value] of totals) {
+    if (value > bestValue) {
+      bestCurrency = currency
+      bestValue = value
+    }
+  }
+
+  return bestCurrency ?? fallback
 }
 
 export async function getPortfolioSummary(vaultDir = resolveVaultDir()) {
