@@ -1,8 +1,17 @@
 {
   "name": "portfolio-vault",
   "version": "0.2.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AIDiscovery007/portfolio-vault.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AIDiscovery007/portfolio-vault/issues"
+  },
+  "homepage": "https://github.com/AIDiscovery007/portfolio-vault#readme",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
