@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "portfolio_vault_mcp": {
+      "command": "bash",
+      "args": [
+        "./scripts/start-mcp.sh"
+      ],
+      "cwd": "."
+    }
+  }
+}

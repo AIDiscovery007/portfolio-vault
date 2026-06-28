@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+qa/*.png
+qa/vault-backup-e2e/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+src/server/*.js
+src/server/*.d.ts

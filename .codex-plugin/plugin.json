@@ -1,0 +1,37 @@
+{
+  "name": "portfolio-vault",
+  "version": "0.1.0",
+  "description": "A local-first Codex plugin for recording, importing, auditing, and reviewing personal investment positions.",
+  "author": {
+    "name": "Qiaochao"
+  },
+  "keywords": [
+    "portfolio",
+    "investing",
+    "ledger",
+    "positions",
+    "local-first"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Portfolio Vault",
+    "shortDescription": "Manage a local investment ledger and position dashboard from Codex.",
+    "longDescription": "Portfolio Vault runs a local web service and MCP server for a personal, local-first investment vault. It keeps an append-only ledger, import drafts, source evidence, derived positions, and a review-focused localhost UI for approving CSV or screenshot imports before they enter the formal ledger.",
+    "developerName": "Qiaochao",
+    "category": "Productivity",
+    "brandColor": "#58735F",
+    "capabilities": [
+      "Local web dashboard",
+      "Append-only investment ledger",
+      "Import draft review",
+      "Codex MCP tools",
+      "Project-independent vault"
+    ],
+    "defaultPrompt": [
+      "Open Portfolio Vault.",
+      "Import this brokerage screenshot into Portfolio Vault as a draft.",
+      "Summarize my Portfolio Vault positions."
+    ]
+  }
+}
