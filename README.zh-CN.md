@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img alt="Portfolio Vault 初始化界面" src="./assets/portfolio-vault-initial.png" width="960">
+  <img alt="Portfolio Vault 初始化界面" src="./assets/portfolio-vault-initial-zh-CN.png" width="960">
 </p>
 
 Portfolio Vault 可以把 Codex 变成一个轻量的投资仓位工作台。你可以把券商截图或 CSV 放进对话，让 Codex 生成待审导入草稿，在本地 Web UI 里审核，然后确认入账到追加式本地账本。

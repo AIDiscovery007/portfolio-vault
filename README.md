@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img alt="Portfolio Vault initial dashboard" src="./assets/portfolio-vault-initial.png" width="960">
+  <img alt="Portfolio Vault initial dashboard" src="./assets/portfolio-vault-initial-en.png" width="960">
 </p>
 
 Portfolio Vault turns Codex into a lightweight investment operations console. Drop a brokerage screenshot or CSV into the conversation, let Codex prepare an import draft, review it in a local web UI, then approve it into an append-only local ledger.

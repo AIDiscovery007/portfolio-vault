@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+import type { TFunction } from 'i18next'
 import {
   ArrowDownToLine,
   BriefcaseBusiness,
@@ -18,6 +19,9 @@ import {
   Upload,
   WalletCards
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import './i18n'
+import { changeLanguage, languageOptions, localeForLanguage, resolvedLanguage, type SupportedLanguage } from './i18n'
 import './styles.css'
 
 type Account = {
@@ -118,9 +122,9 @@ type ImportDraft = {
 type ViewMode = 'overview' | 'positions' | 'imports'
 
 const navItems = [
-  { id: 'overview' as const, icon: Grid2X2, label: 'Overview' },
-  { id: 'positions' as const, icon: LayoutList, label: 'Positions' },
-  { id: 'imports' as const, icon: Upload, label: 'Imports' }
+  { id: 'overview' as const, icon: Grid2X2, labelKey: 'nav.overview' },
+  { id: 'positions' as const, icon: LayoutList, labelKey: 'nav.positions' },
+  { id: 'imports' as const, icon: Upload, labelKey: 'nav.imports' }
 ]
 
 const emptySummary: PortfolioSummary = {
@@ -135,6 +139,7 @@ const emptySummary: PortfolioSummary = {
 }
 
 function App() {
+  const { t, i18n } = useTranslation()
   const [summary, setSummary] = useState<PortfolioSummary | null>(null)
   const [drafts, setDrafts] = useState<ImportDraft[]>([])
   const [loading, setLoading] = useState(true)
@@ -204,6 +209,8 @@ function App() {
   }, [drafts, expandedDraftId])
 
   const data = summary ?? emptySummary
+  const language = resolvedLanguage(i18n.resolvedLanguage)
+  const locale = localeForLanguage(language)
   const baseCurrency = data.baseCurrency ?? inferDisplayCurrency(data) ?? 'CNY'
   const instruments = useMemo(() => new Map(data.instruments.map((instrument) => [instrument.id, instrument])), [data.instruments])
   const accounts = useMemo(() => new Map(data.accounts.map((account) => [account.id, account])), [data.accounts])
@@ -217,7 +224,7 @@ function App() {
   const unrealized = sum(data.positions.map((item) => item.unrealizedPnL ?? 0))
   const realized = sum(data.positions.map((item) => item.realizedPnL))
   const totalAssets = totalMarket + totalCash
-  const assetAllocation = allocation(data.positions, instruments, (instrument) => labelAssetClass(instrument?.assetClass))
+  const assetAllocation = allocation(data.positions, instruments, (instrument) => labelAssetClass(instrument?.assetClass, t))
   const currencyAllocation = allocation(data.positions, instruments, (instrument, position) => instrument?.currency ?? position.currency)
   const accountAllocation = accountSummary(data.positions, data.cashByAccount, accounts)
   const topPositions = filteredPositions.slice(0, 8)
@@ -244,20 +251,21 @@ function App() {
 
   return (
     <main className="app-shell">
-      <aside className="rail" aria-label="Portfolio navigation">
+      <aside className="rail" aria-label={t('nav.navigation')}>
         <div className="brand-mark" title="Portfolio Vault">
           <BriefcaseBusiness size={20} strokeWidth={1.8} />
         </div>
         <nav>
           {navItems.map((item) => {
             const Icon = item.icon
+            const label = t(item.labelKey)
             return (
               <button
                 key={item.id}
                 className={mode === item.id ? 'active' : ''}
                 type="button"
-                title={item.label}
-                aria-label={item.label}
+                title={label}
+                aria-label={label}
                 onClick={() => setMode(item.id)}
               >
                 <Icon size={19} strokeWidth={1.65} />
@@ -266,7 +274,7 @@ function App() {
             )
           })}
         </nav>
-        <button className="rail-bottom" type="button" title="Settings" aria-label="Settings">
+        <button className="rail-bottom" type="button" title={t('nav.settings')} aria-label={t('nav.settings')}>
           <Settings size={19} strokeWidth={1.65} />
         </button>
       </aside>
@@ -277,12 +285,13 @@ function App() {
             <h1>Portfolio Vault</h1>
           </div>
           <div className="top-actions">
-            <button className="icon-button" type="button" title="Search" aria-label="Search" onClick={() => setQueryOpen((value) => !value)}>
+            <button className="icon-button" type="button" title={t('actions.search')} aria-label={t('actions.search')} onClick={() => setQueryOpen((value) => !value)}>
               <Search size={17} strokeWidth={1.7} />
             </button>
-            <button className="icon-button" type="button" title="Refresh" aria-label="Refresh" onClick={() => window.location.reload()}>
+            <button className="icon-button" type="button" title={t('actions.refresh')} aria-label={t('actions.refresh')} onClick={() => window.location.reload()}>
               <RefreshCw size={17} strokeWidth={1.7} />
             </button>
+            <LanguageToggle language={language} />
             <span className="base-currency">{baseCurrency}</span>
             <CheckCircle2 className="ok-icon" size={17} strokeWidth={1.8} />
           </div>
@@ -291,36 +300,36 @@ function App() {
         {queryOpen ? (
           <label className="quiet-search">
             <Search size={16} strokeWidth={1.7} />
-            <input aria-label="Search positions" placeholder="Search is intentionally lightweight in this MVP" />
+            <input aria-label={t('search.positions')} placeholder={t('search.placeholder')} />
           </label>
         ) : null}
 
         {isEmpty ? (
-          <Onboarding />
+          <Onboarding t={t} />
         ) : (
           <>
-            <section className="metrics" aria-label="Portfolio summary">
-              <Metric icon={CircleDollarSign} label="总资产" value={money(totalAssets, baseCurrency)} detail={loading ? '读取本地 vault' : '本地最新快照'} />
-              <Metric icon={WalletCards} label="现金" value={money(totalCash, baseCurrency)} detail={`占 ${percent(totalCash, totalAssets)}`} />
-              <Metric icon={Gauge} label="浮动收益" value={signedMoney(unrealized, baseCurrency)} detail={percent(unrealized, totalMarket)} tone={unrealized >= 0 ? 'good' : 'bad'} />
-              <Metric icon={ArrowDownToLine} label="待审草稿" value={String(data.pendingDraftCount)} detail="需要审核" tone={data.pendingDraftCount > 0 ? 'warn' : 'neutral'} />
+            <section className="metrics" aria-label={t('metrics.summary')}>
+              <Metric icon={CircleDollarSign} label={t('metrics.totalAssets')} value={money(totalAssets, baseCurrency, locale)} detail={loading ? t('metrics.loading') : t('metrics.latestSnapshot')} />
+              <Metric icon={WalletCards} label={t('metrics.cash')} value={money(totalCash, baseCurrency, locale)} detail={t('metrics.allocation', { value: percent(totalCash, totalAssets) })} />
+              <Metric icon={Gauge} label={t('metrics.unrealized')} value={signedMoney(unrealized, baseCurrency, locale)} detail={percent(unrealized, totalMarket)} tone={unrealized >= 0 ? 'good' : 'bad'} />
+              <Metric icon={ArrowDownToLine} label={t('metrics.pendingDrafts')} value={String(data.pendingDraftCount)} detail={t('metrics.needsReview')} tone={data.pendingDraftCount > 0 ? 'warn' : 'neutral'} />
             </section>
 
             <section className="focus-grid">
               <article className="exposure-panel">
-                <PanelHeading icon={Gauge} title="资产暴露" subtitle={`${data.positions.length} 个仓位`} />
+                <PanelHeading icon={Gauge} title={t('panels.assetExposure')} subtitle={t('panels.positionsCount', { count: data.positions.length })} />
                 <StackBar items={assetAllocation} />
-                <AllocationList items={assetAllocation} />
+                <AllocationList items={assetAllocation} t={t} />
               </article>
 
               <article className="side-panel">
-                <PanelHeading icon={Landmark} title="账户" />
-                <CompactList items={accountAllocation.slice(0, 4)} emptyText="暂无账户" currency={baseCurrency} />
+                <PanelHeading icon={Landmark} title={t('panels.accounts')} />
+                <CompactList items={accountAllocation.slice(0, 4)} emptyText={t('panels.emptyAccounts')} currency={baseCurrency} locale={locale} />
               </article>
 
               <article className="side-panel">
-                <PanelHeading icon={CircleDollarSign} title="币种" />
-                <CompactList items={currencyAllocation.slice(0, 4)} emptyText="暂无币种暴露" currency={baseCurrency} />
+                <PanelHeading icon={CircleDollarSign} title={t('panels.currencies')} />
+                <CompactList items={currencyAllocation.slice(0, 4)} emptyText={t('panels.emptyCurrencies')} currency={baseCurrency} locale={locale} />
               </article>
             </section>
 
@@ -331,6 +340,8 @@ function App() {
                 approvingDraftId={approvingDraftId}
                 actionError={actionError}
                 baseCurrency={baseCurrency}
+                locale={locale}
+                t={t}
                 onToggleDraft={(draftId) => setExpandedDraftId((current) => (current === draftId ? null : draftId))}
                 onRequestApprove={setConfirmingDraft}
               />
@@ -342,8 +353,10 @@ function App() {
                 instruments={instruments}
                 positions={topPositions}
                 totalAssets={totalAssets}
+                locale={locale}
                 allAccounts={data.accounts}
                 mode={mode}
+                t={t}
                 onAccountFilterChange={setAccountFilter}
               />
             )}
@@ -355,8 +368,10 @@ function App() {
         <ApproveDraftDialog
           draft={confirmingDraft}
           baseCurrency={baseCurrency}
+          locale={locale}
           approving={approvingDraftId === confirmingDraft.id}
           error={actionError}
+          t={t}
           onCancel={() => setConfirmingDraft(null)}
           onConfirm={() => {
             void approveDraft(confirmingDraft).then((approved) => {
@@ -371,6 +386,19 @@ function App() {
 
 function hasPortfolioData(summary: PortfolioSummary) {
   return summary.accounts.length > 0 || summary.instruments.length > 0 || summary.positions.length > 0 || summary.cashByAccount.length > 0
+}
+
+function LanguageToggle({ language }: { language: SupportedLanguage }) {
+  const { t } = useTranslation()
+  const nextLanguage = language === 'en' ? 'zh-CN' : 'en'
+  const current = languageOptions.find((option) => option.code === language) ?? languageOptions[0]
+  const nextLabel = nextLanguage === 'en' ? t('actions.switchToEnglish') : t('actions.switchToChinese')
+
+  return (
+    <button className="language-toggle" type="button" title={nextLabel} aria-label={nextLabel} onClick={() => void changeLanguage(nextLanguage)}>
+      {current.shortLabel}
+    </button>
+  )
 }
 
 function Metric({
@@ -398,19 +426,19 @@ function Metric({
   )
 }
 
-function Onboarding() {
+function Onboarding({ t }: { t: TFunction }) {
   const steps = [
-    { icon: Upload, title: '交给 Codex', text: '把截图、CSV 或交易记录放进对话里，先生成待审草稿。' },
-    { icon: Search, title: '核对关键信息', text: '代码、净值、金额、收益和问题会集中显示在审核页。' },
-    { icon: CheckCircle2, title: '批准后入账', text: '确认无误后进入正式仓位，页面会自动同步刷新。' }
+    { icon: Upload, title: t('onboarding.handToCodex'), text: t('onboarding.handToCodexText') },
+    { icon: Search, title: t('onboarding.reviewDetails'), text: t('onboarding.reviewDetailsText') },
+    { icon: CheckCircle2, title: t('onboarding.approveAndBook'), text: t('onboarding.approveAndBookText') }
   ]
 
   return (
-    <section className="onboarding" aria-label="快速开始">
+    <section className="onboarding" aria-label={t('onboarding.label')}>
       <div className="onboarding-copy">
-        <p className="eyebrow">快速开始</p>
-        <h2>先导入，再审核，最后入账。</h2>
-        <p>Portfolio Vault 只把确认过的数据放进正式仓位。第一次使用时，你只需要从一份截图或 CSV 开始。</p>
+        <p className="eyebrow">{t('onboarding.label')}</p>
+        <h2>{t('onboarding.title')}</h2>
+        <p>{t('onboarding.body')}</p>
       </div>
       <div className="onboarding-steps">
         {steps.map((step) => {
@@ -434,8 +462,10 @@ function PositionsSection({
   allAccounts,
   baseCurrency,
   instruments,
+  locale,
   mode,
   positions,
+  t,
   totalAssets,
   onAccountFilterChange
 }: {
@@ -444,28 +474,30 @@ function PositionsSection({
   allAccounts: Account[]
   baseCurrency: string
   instruments: Map<string, Instrument>
+  locale: string
   mode: ViewMode
   positions: Position[]
+  t: TFunction
   totalAssets: number
   onAccountFilterChange: (accountId: string) => void
 }) {
   return (
-    <section className="table-section" aria-label="Core positions">
+    <section className="table-section" aria-label={t('positions.aria')}>
       <div className="section-title-row">
         <div>
-          <h2>核心仓位</h2>
-          <p>{modeLabel(mode)}</p>
+          <h2>{t('positions.title')}</h2>
+          <p>{modeLabel(mode, t)}</p>
         </div>
         <div className="table-tools">
-          <select value={accountFilter} aria-label="按账户筛选" onChange={(event) => onAccountFilterChange(event.target.value)} disabled={allAccounts.length === 0}>
-            <option value="all">全部账户</option>
+          <select value={accountFilter} aria-label={t('positions.filterByAccount')} onChange={(event) => onAccountFilterChange(event.target.value)} disabled={allAccounts.length === 0}>
+            <option value="all">{t('positions.allAccounts')}</option>
             {allAccounts.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.name}
               </option>
             ))}
           </select>
-          <button className="icon-button" type="button" title="筛选" aria-label="筛选">
+          <button className="icon-button" type="button" title={t('actions.filter')} aria-label={t('actions.filter')}>
             <SlidersHorizontal size={17} strokeWidth={1.7} />
           </button>
         </div>
@@ -473,12 +505,12 @@ function PositionsSection({
 
       <div className="position-table" role="table">
         <div className="table-row table-head" role="row">
-          <span>代码</span>
-          <span>名称</span>
-          <span>账户</span>
-          <span>市值</span>
-          <span>收益</span>
-          <span>占比</span>
+          <span>{t('positions.headers.symbol')}</span>
+          <span>{t('positions.headers.name')}</span>
+          <span>{t('positions.headers.account')}</span>
+          <span>{t('positions.headers.marketValue')}</span>
+          <span>{t('positions.headers.pnl')}</span>
+          <span>{t('positions.headers.allocation')}</span>
         </div>
         {positions.map((item) => {
           const instrument = instruments.get(item.instrumentId)
@@ -487,10 +519,10 @@ function PositionsSection({
           return (
             <div className="table-row" role="row" key={`${item.accountId}-${item.instrumentId}`}>
               <span className="symbol">{instrument?.symbol ?? item.instrumentId}</span>
-              <span className="truncate">{instrument?.name ?? '未映射标的'}</span>
+              <span className="truncate">{instrument?.name ?? t('positions.unmappedInstrument')}</span>
               <span className="muted truncate">{account?.name ?? item.accountId}</span>
-              <span>{money(value, item.currency ?? baseCurrency)}</span>
-              <span className={(item.unrealizedPnL ?? 0) >= 0 ? 'positive' : 'negative'}>{signedMoney(item.unrealizedPnL ?? 0, item.currency ?? baseCurrency)}</span>
+              <span>{money(value, item.currency ?? baseCurrency, locale)}</span>
+              <span className={(item.unrealizedPnL ?? 0) >= 0 ? 'positive' : 'negative'}>{signedMoney(item.unrealizedPnL ?? 0, item.currency ?? baseCurrency, locale)}</span>
               <span>{percent(value, totalAssets)}</span>
             </div>
           )
@@ -498,7 +530,7 @@ function PositionsSection({
         {positions.length === 0 ? (
           <div className="empty-table">
             <LayoutList size={18} strokeWidth={1.7} />
-            <span>暂无正式仓位</span>
+            <span>{t('positions.empty')}</span>
           </div>
         ) : null}
       </div>
@@ -512,6 +544,8 @@ function DraftReviewSection({
   approvingDraftId,
   actionError,
   baseCurrency,
+  locale,
+  t,
   onToggleDraft,
   onRequestApprove
 }: {
@@ -520,26 +554,28 @@ function DraftReviewSection({
   approvingDraftId: string | null
   actionError: string | null
   baseCurrency: string
+  locale: string
+  t: TFunction
   onToggleDraft: (draftId: string) => void
   onRequestApprove: (draft: ImportDraft) => void
 }) {
   if (drafts.length === 0) {
     return (
-      <section className="table-section imports-section" aria-label="导入审核">
+      <section className="table-section imports-section" aria-label={t('imports.aria')}>
         <div className="empty-table tall">
           <Upload size={19} strokeWidth={1.7} />
-          <span>暂无导入草稿</span>
+          <span>{t('imports.emptyDrafts')}</span>
         </div>
       </section>
     )
   }
 
   return (
-    <section className="table-section imports-section" aria-label="导入审核">
+    <section className="table-section imports-section" aria-label={t('imports.aria')}>
       <div className="section-title-row">
         <div>
-          <h2>导入审核</h2>
-          <p>草稿先看清，再批准入账。</p>
+          <h2>{t('imports.title')}</h2>
+          <p>{t('imports.subtitle')}</p>
         </div>
       </div>
 
@@ -550,33 +586,33 @@ function DraftReviewSection({
           const holdingRows = draft.rows.filter((row) => row.extractedHolding)
           const displayRows = holdingRows.length > 0 ? holdingRows : draft.rows
           const canApprove = draft.status === 'draft' && draft.rows.some((row) => row.status === 'ready' && row.proposedEvent)
-          const bookedDate = bookedDateLabel(draft)
+          const bookedDate = bookedDateLabel(draft, locale)
 
           return (
             <article className={`import-card ${isExpanded ? 'open' : ''}`} key={draft.id}>
               <button className="import-card-toggle" type="button" aria-expanded={isExpanded} onClick={() => onToggleDraft(draft.id)}>
-                <span className={`status-pill ${draft.status}`}>{statusLabel(draft.status)}</span>
+                <span className={`status-pill ${draft.status}`}>{statusLabel(draft.status, t)}</span>
                 <span className="import-card-main">
-                  <strong>{draft.sourceFileName ?? '导入记录'}</strong>
+                  <strong>{draft.sourceFileName ?? t('imports.defaultRecord')}</strong>
                   <span className="import-card-subline">
                     <span>
                       <CalendarDays size={12} strokeWidth={1.7} />
-                      {bookedDate ? `入账日 ${bookedDate}` : '未入账'}
+                      {bookedDate ? t('imports.bookedDate', { date: bookedDate }) : t('imports.notBooked')}
                     </span>
                   </span>
                 </span>
-                <span className="import-card-metrics" aria-label="导入摘要">
+                <span className="import-card-metrics" aria-label={t('imports.summary')}>
                   <span>
-                    <strong>{money(stats.marketValue, baseCurrency)}</strong>
-                    <em>市值</em>
+                    <strong>{money(stats.marketValue, baseCurrency, locale)}</strong>
+                    <em>{t('imports.marketValue')}</em>
                   </span>
                   <span>
                     <strong>{stats.readyRows}/{draft.rows.length}</strong>
-                    <em>{draft.status === 'approved' ? '已入账' : '可入账'}</em>
+                    <em>{draft.status === 'approved' ? t('imports.bookedRows') : t('imports.readyRows')}</em>
                   </span>
                   <span>
                     <strong>{stats.issueCount}</strong>
-                    <em>提示</em>
+                    <em>{t('imports.issues')}</em>
                   </span>
                 </span>
                 <ChevronDown className="chevron" size={18} strokeWidth={1.7} aria-hidden="true" />
@@ -594,20 +630,20 @@ function DraftReviewSection({
                       return (
                         <article className="draft-row-card" key={row.id}>
                           <div>
-                            <span className="symbol">{holding?.fundCode ?? row.proposedEvent?.instrumentId ?? row.proposedEvent?.type ?? '待确认'}</span>
+                            <span className="symbol">{holding?.fundCode ?? row.proposedEvent?.instrumentId ?? row.proposedEvent?.type ?? t('imports.pendingConfirm')}</span>
                             <strong>{title}</strong>
-                            <em>{holding?.navDate ? `${holding.navDate} · 净值 ${number(holding.unitNav)}` : row.rawText ?? '原始记录待确认'}</em>
+                            <em>{holding?.navDate ? t('imports.navWithDate', { date: holding.navDate, value: number(holding.unitNav, 4, locale) }) : row.rawText ?? t('imports.originalRecordPending')}</em>
                           </div>
                           <div>
-                            <span>{holding?.marketValue === undefined ? '金额待确认' : money(holding.marketValue, holding.currency ?? baseCurrency)}</span>
-                            <strong className={pnl >= 0 ? 'positive' : 'negative'}>{holding ? signedMoney(pnl, holding.currency ?? baseCurrency) : '--'}</strong>
-                            <em>{holding?.estimatedShares ? `${number(holding.estimatedShares, 4)} 份` : '份额待确认'}</em>
+                            <span>{holding?.marketValue === undefined ? t('imports.amountPending') : money(holding.marketValue, holding.currency ?? baseCurrency, locale)}</span>
+                            <strong className={pnl >= 0 ? 'positive' : 'negative'}>{holding ? signedMoney(pnl, holding.currency ?? baseCurrency, locale) : '--'}</strong>
+                            <em>{holding?.estimatedShares ? t('imports.shares', { value: number(holding.estimatedShares, 4, locale) }) : t('imports.sharesPending')}</em>
                           </div>
                           <div>
                             <span className={`row-state ${draft.status === 'approved' ? 'ready' : row.status}`}>
-                              {draft.status === 'approved' ? '已入账' : rowStatusLabel(row.status)}
+                              {draft.status === 'approved' ? t('status.approved') : rowStatusLabel(row.status, t)}
                             </span>
-                            <em>{holding?.allocationPct ? `${holding.allocationPct.toFixed(2)}%` : '占比待确认'}</em>
+                            <em>{holding?.allocationPct ? `${holding.allocationPct.toFixed(2)}%` : t('imports.allocationPending')}</em>
                           </div>
                           {row.issues && row.issues.length > 0 ? <p>{row.issues[0]}</p> : null}
                         </article>
@@ -618,7 +654,7 @@ function DraftReviewSection({
                   <div className="import-card-actions">
                     <button className="approve-button" type="button" disabled={!canApprove || approvingDraftId === draft.id} onClick={() => onRequestApprove(draft)}>
                       <CheckCircle2 size={16} strokeWidth={1.75} />
-                      {draft.status === 'approved' ? '已入账' : approvingDraftId === draft.id ? '入账中' : canApprove ? '批准入账' : '待补齐'}
+                      {draft.status === 'approved' ? t('imports.approved') : approvingDraftId === draft.id ? t('imports.approving') : canApprove ? t('imports.approve') : t('imports.needsCompletion')}
                     </button>
                   </div>
                 </div>
@@ -634,15 +670,19 @@ function DraftReviewSection({
 function ApproveDraftDialog({
   draft,
   baseCurrency,
+  locale,
   approving,
   error,
+  t,
   onCancel,
   onConfirm
 }: {
   draft: ImportDraft
   baseCurrency: string
+  locale: string
   approving: boolean
   error: string | null
+  t: TFunction
   onCancel: () => void
   onConfirm: () => void
 }) {
@@ -652,31 +692,31 @@ function ApproveDraftDialog({
       <section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="approve-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <CheckCircle2 size={18} strokeWidth={1.75} />
-          <h2 id="approve-dialog-title">确认入账</h2>
+          <h2 id="approve-dialog-title">{t('approveDialog.title')}</h2>
         </header>
-        <p>确认后，这批草稿会写入正式仓位，并立即刷新本地看板。</p>
+        <p>{t('approveDialog.body')}</p>
         {error ? <p className="action-error">{error}</p> : null}
         <div className="confirm-dialog-facts">
           <span>
-            <strong>{money(stats.marketValue, baseCurrency)}</strong>
-            <em>市值</em>
+            <strong>{money(stats.marketValue, baseCurrency, locale)}</strong>
+            <em>{t('imports.marketValue')}</em>
           </span>
           <span>
             <strong>{stats.readyRows}/{draft.rows.length}</strong>
-            <em>可入账</em>
+            <em>{t('approveDialog.ready')}</em>
           </span>
           <span>
-            <strong>{draft.accountId ?? '待确认'}</strong>
-            <em>账户</em>
+            <strong>{draft.accountId ?? t('approveDialog.pending')}</strong>
+            <em>{t('approveDialog.account')}</em>
           </span>
         </div>
         <div className="confirm-dialog-actions">
           <button className="ghost-button" type="button" disabled={approving} onClick={onCancel}>
-            取消
+            {t('actions.cancel')}
           </button>
           <button className="approve-button" type="button" disabled={approving} onClick={onConfirm}>
             <CheckCircle2 size={16} strokeWidth={1.75} />
-            {approving ? '入账中' : '确认入账'}
+            {approving ? t('approveDialog.approving') : t('approveDialog.confirm')}
           </button>
         </div>
       </section>
@@ -703,10 +743,11 @@ function PanelHeading({
 }
 
 function StackBar({ items }: { items: AllocationItem[] }) {
-  if (items.length === 0) return <div className="stack-bar empty" aria-label="No allocation yet" />
+  const { t } = useTranslation()
+  if (items.length === 0) return <div className="stack-bar empty" aria-label={t('panels.noAllocationYet')} />
 
   return (
-    <div className="stack-bar" aria-label="Allocation bar">
+    <div className="stack-bar" aria-label={t('panels.allocationBar')}>
       {items.map((item, index) => (
         <span key={item.label} style={{ width: `${item.weight}%`, background: palette[index % palette.length] }} title={`${item.label}: ${item.weight.toFixed(1)}%`} />
       ))}
@@ -714,8 +755,8 @@ function StackBar({ items }: { items: AllocationItem[] }) {
   )
 }
 
-function AllocationList({ items }: { items: AllocationItem[] }) {
-  if (items.length === 0) return <p className="empty-note">暂无暴露</p>
+function AllocationList({ items, t }: { items: AllocationItem[]; t: TFunction }) {
+  if (items.length === 0) return <p className="empty-note">{t('panels.emptyExposure')}</p>
 
   return (
     <div className="allocation-list">
@@ -730,7 +771,7 @@ function AllocationList({ items }: { items: AllocationItem[] }) {
   )
 }
 
-function CompactList({ items, emptyText, currency }: { items: AllocationItem[]; emptyText: string; currency: string }) {
+function CompactList({ items, emptyText, currency, locale }: { items: AllocationItem[]; emptyText: string; currency: string; locale: string }) {
   if (items.length === 0) return <p className="empty-note">{emptyText}</p>
 
   return (
@@ -738,7 +779,7 @@ function CompactList({ items, emptyText, currency }: { items: AllocationItem[]; 
       {items.map((item) => (
         <div key={item.label}>
           <span className="truncate">{item.label}</span>
-          <strong>{money(item.value, currency)}</strong>
+          <strong>{money(item.value, currency, locale)}</strong>
           <em>{item.weight.toFixed(1)}%</em>
         </div>
       ))}
@@ -789,39 +830,39 @@ function accountSummary(positions: Position[], cash: CashBalance[], accounts: Ma
     .sort((a, b) => b.value - a.value)
 }
 
-function labelAssetClass(assetClass?: string) {
+function labelAssetClass(assetClass: string | undefined, t: TFunction) {
   if (assetClass === 'etf') return 'ETF'
-  if (assetClass === 'fund') return '基金'
-  if (assetClass === 'stock') return '股票'
-  if (assetClass === 'cash') return '现金'
-  return '其他'
+  if (assetClass === 'fund') return t('assetClass.fund')
+  if (assetClass === 'stock') return t('assetClass.stock')
+  if (assetClass === 'cash') return t('assetClass.cash')
+  return t('assetClass.other')
 }
 
-function modeLabel(mode: ViewMode) {
-  if (mode === 'positions') return '聚焦当前正式仓位。'
-  return '看总额、暴露和集中度。'
+function modeLabel(mode: ViewMode, t: TFunction) {
+  if (mode === 'positions') return t('positions.positionsMode')
+  return t('positions.overviewMode')
 }
 
 function sum(values: number[]) {
   return values.reduce((total, value) => total + value, 0)
 }
 
-function money(value: number, currency = 'CNY') {
-  return new Intl.NumberFormat('zh-CN', {
+function money(value: number, currency = 'CNY', locale = 'en-US') {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     maximumFractionDigits: 0
   }).format(value)
 }
 
-function signedMoney(value: number, currency = 'CNY') {
-  const formatted = money(Math.abs(value), currency)
+function signedMoney(value: number, currency = 'CNY', locale = 'en-US') {
+  const formatted = money(Math.abs(value), currency, locale)
   return `${value >= 0 ? '+' : '-'}${formatted}`
 }
 
-function number(value?: number, maximumFractionDigits = 4) {
+function number(value?: number, maximumFractionDigits = 4, locale = 'en-US') {
   if (value === undefined || value === null || Number.isNaN(value)) return '--'
-  return new Intl.NumberFormat('zh-CN', { maximumFractionDigits }).format(value)
+  return new Intl.NumberFormat(locale, { maximumFractionDigits }).format(value)
 }
 
 function percent(value: number, total: number) {
@@ -829,14 +870,14 @@ function percent(value: number, total: number) {
   return `${((value / total) * 100).toFixed(1)}%`
 }
 
-function bookedDateLabel(draft: ImportDraft) {
+function bookedDateLabel(draft: ImportDraft, locale: string) {
   const value = draft.approvedAt ?? draft.approvalAssumptions?.approvedAt ?? (draft.status === 'approved' ? draft.updatedAt : null)
   if (!value) return null
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(locale, {
     year: 'numeric',
-    month: 'long',
+    month: 'short',
     day: 'numeric',
     timeZone: 'Asia/Shanghai'
   }).format(date)
@@ -857,17 +898,17 @@ function draftStats(draft: ImportDraft) {
   }
 }
 
-function statusLabel(status: ImportDraft['status']) {
-  if (status === 'approved') return '已入账'
-  if (status === 'rejected') return '已拒绝'
-  return '待审核'
+function statusLabel(status: ImportDraft['status'], t: TFunction) {
+  if (status === 'approved') return t('status.approved')
+  if (status === 'rejected') return t('status.rejected')
+  return t('status.draft')
 }
 
-function rowStatusLabel(status: DraftRow['status']) {
-  if (status === 'ready') return '可入账'
-  if (status === 'duplicate_suspected') return '疑似重复'
-  if (status === 'unsupported') return '暂不支持'
-  return '需确认'
+function rowStatusLabel(status: DraftRow['status'], t: TFunction) {
+  if (status === 'ready') return t('status.ready')
+  if (status === 'duplicate_suspected') return t('status.duplicate')
+  if (status === 'unsupported') return t('status.unsupported')
+  return t('status.needsReview')
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
