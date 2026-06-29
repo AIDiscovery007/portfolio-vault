@@ -1,8 +1,7 @@
-# Portfolio Vault
-
-<p align="center">
-  <img alt="Portfolio Vault logo" src="./assets/portfolio-vault-logo.png" width="112">
-</p>
+<h1 align="center">
+  <img alt="Portfolio Vault logo" src="./assets/portfolio-vault-logo.png" width="34" height="34" />
+  Portfolio Vault
+</h1>
 
 <p align="center">
   <strong>一个本地优先的 Codex 插件，用于导入、审核和管理个人投资仓位。</strong>

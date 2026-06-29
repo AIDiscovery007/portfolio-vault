@@ -1,8 +1,7 @@
-# Portfolio Vault
-
-<p align="center">
-  <img alt="Portfolio Vault logo" src="./assets/portfolio-vault-logo.png" width="112">
-</p>
+<h1 align="center">
+  <img alt="Portfolio Vault logo" src="./assets/portfolio-vault-logo.png" width="34" height="34" />
+  Portfolio Vault
+</h1>
 
 <p align="center">
   <strong>A local-first Codex plugin for importing, reviewing, and tracking personal investment positions.</strong>
