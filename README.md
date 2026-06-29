@@ -15,6 +15,30 @@ Portfolio Vault turns Codex into a lightweight investment operations console. Dr
 
 The project is built around one idea: personal portfolio records should be easy to import, easy to audit, and stored locally by default.
 
+## Codex Setup
+
+Open Codex and paste this message:
+
+> 请帮我安装并启用这个 Codex 插件：https://github.com/AIDiscovery007/portfolio-vault
+> 请你全程代办：把项目下载到合适的本地目录，安装依赖，注册并启用为本地 Codex 插件，初始化 Portfolio Vault 数据目录，然后启动本地 dashboard 并打开页面。
+> 如果需要我确认安装路径、修改 Codex 配置、授权，或重开 Codex 线程，请直接告诉我该点哪里。完成后请告诉我三件事：插件是否启用、vault 数据目录在哪里、dashboard 地址是什么。
+
+If Codex asks you to reload plugins or start a new chat, do that once. Then say:
+
+```text
+Open Portfolio Vault.
+```
+
+Useful next requests:
+
+| Goal | Say this in Codex |
+| --- | --- |
+| Open dashboard | `Open Portfolio Vault.` |
+| First-time setup | `Initialize Portfolio Vault.` |
+| Import holdings | `Import this brokerage screenshot into Portfolio Vault as a draft.` |
+| Review portfolio | `Summarize my Portfolio Vault positions.` |
+| Clean reset | `Reset Portfolio Vault to first-use state.` |
+
 ## Highlights
 
 | Area | What it does |
@@ -52,7 +76,7 @@ Portfolio Vault stores data in:
 
 The plugin source code and the user's investment vault are separate. Resetting the vault never deletes the plugin source tree.
 
-## Quick Start
+## Manual Setup
 
 ```bash
 git clone https://github.com/AIDiscovery007/portfolio-vault.git
@@ -81,7 +105,7 @@ Enable it as a local Codex plugin, then use the natural-language workflows below
 
 ## Natural Language Workflows
 
-Once enabled in Codex, you can drive the plugin with short requests:
+Once enabled in Codex, you can keep driving the plugin with short requests:
 
 | Goal | Example request |
 | --- | --- |
