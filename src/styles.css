@@ -71,8 +71,16 @@ button:disabled {
 
 .brand-mark {
   align-self: center;
-  color: #2f5b3d;
-  background: #eef3eb;
+  overflow: hidden;
+  background: transparent;
+}
+
+.brand-mark-image {
+  width: 32px;
+  height: 32px;
+  display: block;
+  border-radius: 8px;
+  background: url("../assets/portfolio-vault-logo.png") center / cover no-repeat;
 }
 
 .rail nav {

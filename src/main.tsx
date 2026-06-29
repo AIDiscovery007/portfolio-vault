@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client'
 import type { TFunction } from 'i18next'
 import {
   ArrowDownToLine,
-  BriefcaseBusiness,
   CalendarDays,
   ChevronDown,
   CheckCircle2,
@@ -253,7 +252,7 @@ function App() {
     <main className="app-shell">
       <aside className="rail" aria-label={t('nav.navigation')}>
         <div className="brand-mark" title="Portfolio Vault">
-          <BriefcaseBusiness size={20} strokeWidth={1.8} />
+          <span className="brand-mark-image" aria-hidden="true" />
         </div>
         <nav>
           {navItems.map((item) => {
