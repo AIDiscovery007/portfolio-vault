@@ -11,6 +11,10 @@
   <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-58735F?style=flat-square">
 </p>
 
+<p align="center">
+  <img alt="Portfolio Vault initial dashboard" src="./assets/portfolio-vault-initial.png" width="960">
+</p>
+
 Portfolio Vault turns Codex into a lightweight investment operations console. Drop a brokerage screenshot or CSV into the conversation, let Codex prepare an import draft, review it in a local web UI, then approve it into an append-only local ledger.
 
 The project is built around one idea: personal portfolio records should be easy to import, easy to audit, and stored locally by default.
