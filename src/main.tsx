@@ -49,8 +49,10 @@ type Position = {
   costAmount: number
   averageCost: number
   lastPrice: number | null
+  cashInvested: number
   marketValue: number | null
   unrealizedPnL: number | null
+  returnPct: number | null
   realizedPnL: number
   currency: string
 }
@@ -82,6 +84,9 @@ type DraftRow = {
     quantity?: number
     costAmount?: number
     price?: number
+    cashInvested?: number
+    marketValue?: number
+    unrealizedPnL?: number
   }
   rawText?: string
   issues?: string[]
@@ -89,7 +94,9 @@ type DraftRow = {
     name?: string
     officialName?: string
     fundCode?: string
+    assetClass?: 'stock' | 'etf' | 'fund' | 'cash'
     currency?: string
+    cashInvested?: number
     marketValue?: number
     holdingPnl?: number
     holdingPnlPct?: number
@@ -215,17 +222,15 @@ function App() {
   const accounts = useMemo(() => new Map(data.accounts.map((account) => [account.id, account])), [data.accounts])
   const filteredPositions = useMemo(() => {
     const positions = data.positions.filter((item) => accountFilter === 'all' || item.accountId === accountFilter)
-    return positions.sort((a, b) => (b.marketValue ?? 0) - (a.marketValue ?? 0))
+    return positions.sort((a, b) => positionMarketValue(b) - positionMarketValue(a))
   }, [accountFilter, data.positions])
 
-  const totalMarket = sum(data.positions.map((item) => item.marketValue ?? item.costAmount))
-  const totalCash = sum(data.cashByAccount.map((item) => item.balance))
-  const unrealized = sum(data.positions.map((item) => item.unrealizedPnL ?? 0))
-  const realized = sum(data.positions.map((item) => item.realizedPnL))
-  const totalAssets = totalMarket + totalCash
+  const totalNetValue = sum(data.positions.map(positionMarketValue))
+  const totalInvested = sum(data.positions.map(positionCashInvested))
+  const totalReturn = sum(data.positions.map(positionReturn))
   const assetAllocation = allocation(data.positions, instruments, (instrument) => labelAssetClass(instrument?.assetClass, t))
   const currencyAllocation = allocation(data.positions, instruments, (instrument, position) => instrument?.currency ?? position.currency)
-  const accountAllocation = accountSummary(data.positions, data.cashByAccount, accounts)
+  const accountAllocation = accountSummary(data.positions, accounts)
   const topPositions = filteredPositions.slice(0, 8)
   const isEmpty = !hasPortfolioData(data) && drafts.length === 0
 
@@ -308,9 +313,9 @@ function App() {
         ) : (
           <>
             <section className="metrics" aria-label={t('metrics.summary')}>
-              <Metric icon={CircleDollarSign} label={t('metrics.totalAssets')} value={money(totalAssets, baseCurrency, locale)} detail={loading ? t('metrics.loading') : t('metrics.latestSnapshot')} />
-              <Metric icon={WalletCards} label={t('metrics.cash')} value={money(totalCash, baseCurrency, locale)} detail={t('metrics.allocation', { value: percent(totalCash, totalAssets) })} />
-              <Metric icon={Gauge} label={t('metrics.unrealized')} value={signedMoney(unrealized, baseCurrency, locale)} detail={percent(unrealized, totalMarket)} tone={unrealized >= 0 ? 'good' : 'bad'} />
+              <Metric icon={CircleDollarSign} label={t('metrics.totalNetValue')} value={money(totalNetValue, baseCurrency, locale)} detail={loading ? t('metrics.loading') : t('metrics.latestSnapshot')} />
+              <Metric icon={WalletCards} label={t('metrics.cashInvested')} value={money(totalInvested, baseCurrency, locale)} detail={t('metrics.amountBasis')} />
+              <Metric icon={Gauge} label={t('metrics.totalReturn')} value={signedMoney(totalReturn, baseCurrency, locale)} detail={ratePercent(totalInvested === 0 ? null : totalReturn / totalInvested)} tone={totalReturn >= 0 ? 'good' : 'bad'} />
               <Metric icon={ArrowDownToLine} label={t('metrics.pendingDrafts')} value={String(data.pendingDraftCount)} detail={t('metrics.needsReview')} tone={data.pendingDraftCount > 0 ? 'warn' : 'neutral'} />
             </section>
 
@@ -351,7 +356,7 @@ function App() {
                 baseCurrency={baseCurrency}
                 instruments={instruments}
                 positions={topPositions}
-                totalAssets={totalAssets}
+                totalNetValue={totalNetValue}
                 locale={locale}
                 allAccounts={data.accounts}
                 mode={mode}
@@ -465,7 +470,7 @@ function PositionsSection({
   mode,
   positions,
   t,
-  totalAssets,
+  totalNetValue,
   onAccountFilterChange
 }: {
   accounts: Map<string, Account>
@@ -477,7 +482,7 @@ function PositionsSection({
   mode: ViewMode
   positions: Position[]
   t: TFunction
-  totalAssets: number
+  totalNetValue: number
   onAccountFilterChange: (accountId: string) => void
 }) {
   return (
@@ -504,25 +509,29 @@ function PositionsSection({
 
       <div className="position-table" role="table">
         <div className="table-row table-head" role="row">
-          <span>{t('positions.headers.symbol')}</span>
-          <span>{t('positions.headers.name')}</span>
-          <span>{t('positions.headers.account')}</span>
-          <span>{t('positions.headers.marketValue')}</span>
-          <span>{t('positions.headers.pnl')}</span>
+          <span>{t('positions.headers.instrument')}</span>
+          <span>{t('positions.headers.cashInvested')}</span>
+          <span>{t('positions.headers.returnRate')}</span>
           <span>{t('positions.headers.allocation')}</span>
+          <span>{t('positions.headers.marketValue')}</span>
         </div>
         {positions.map((item) => {
           const instrument = instruments.get(item.instrumentId)
           const account = accounts.get(item.accountId)
-          const value = item.marketValue ?? item.costAmount
+          const value = positionMarketValue(item)
+          const invested = positionCashInvested(item)
+          const pnl = positionReturn(item)
+          const returnRate = item.returnPct ?? (invested === 0 ? null : pnl / invested)
           return (
             <div className="table-row" role="row" key={`${item.accountId}-${item.instrumentId}`}>
-              <span className="symbol">{instrument?.symbol ?? item.instrumentId}</span>
-              <span className="truncate">{instrument?.name ?? t('positions.unmappedInstrument')}</span>
-              <span className="muted truncate">{account?.name ?? item.accountId}</span>
+              <span className="position-identity">
+                <strong>{instrument?.symbol ?? item.instrumentId}</strong>
+                <em>{instrument?.name ?? account?.name ?? t('positions.unmappedInstrument')}</em>
+              </span>
+              <span>{money(invested, item.currency ?? baseCurrency, locale)}</span>
+              <span className={pnl >= 0 ? 'positive' : 'negative'}>{ratePercent(returnRate)}</span>
+              <span>{percent(value, totalNetValue)}</span>
               <span>{money(value, item.currency ?? baseCurrency, locale)}</span>
-              <span className={(item.unrealizedPnL ?? 0) >= 0 ? 'positive' : 'negative'}>{signedMoney(item.unrealizedPnL ?? 0, item.currency ?? baseCurrency, locale)}</span>
-              <span>{percent(value, totalAssets)}</span>
             </div>
           )
         })}
@@ -626,23 +635,28 @@ function DraftReviewSection({
                       const holding = row.extractedHolding
                       const title = holding?.officialName ?? holding?.name ?? row.rawText ?? row.id
                       const pnl = holding?.holdingPnl ?? 0
+                      const marketValue = holding?.marketValue ?? row.proposedEvent?.marketValue
+                      const cashInvested = holding?.cashInvested ?? row.proposedEvent?.cashInvested ?? (marketValue === undefined ? undefined : marketValue - pnl)
+                      const returnRate = cashInvested === undefined || cashInvested === 0 ? null : pnl / cashInvested
+                      const rowBooked = draft.status === 'approved' && row.status === 'ready' && Boolean(row.proposedEvent)
                       return (
                         <article className="draft-row-card" key={row.id}>
                           <div>
                             <span className="symbol">{holding?.fundCode ?? row.proposedEvent?.instrumentId ?? row.proposedEvent?.type ?? t('imports.pendingConfirm')}</span>
                             <strong>{title}</strong>
-                            <em>{holding?.navDate ? t('imports.navWithDate', { date: holding.navDate, value: number(holding.unitNav, 4, locale) }) : row.rawText ?? t('imports.originalRecordPending')}</em>
+                            <em>{row.rawText ?? t('imports.originalRecordPending')}</em>
                           </div>
                           <div>
-                            <span>{holding?.marketValue === undefined ? t('imports.amountPending') : money(holding.marketValue, holding.currency ?? baseCurrency, locale)}</span>
+                            <span>{marketValue === undefined ? t('imports.amountPending') : money(marketValue, holding?.currency ?? baseCurrency, locale)}</span>
                             <strong className={pnl >= 0 ? 'positive' : 'negative'}>{holding ? signedMoney(pnl, holding.currency ?? baseCurrency, locale) : '--'}</strong>
-                            <em>{holding?.estimatedShares ? t('imports.shares', { value: number(holding.estimatedShares, 4, locale) }) : t('imports.sharesPending')}</em>
+                            <em>{t('imports.returnRate')}: {ratePercent(returnRate)}</em>
                           </div>
                           <div>
-                            <span className={`row-state ${draft.status === 'approved' ? 'ready' : row.status}`}>
-                              {draft.status === 'approved' ? t('status.approved') : rowStatusLabel(row.status, t)}
+                            <span className={`row-state ${rowBooked ? 'ready' : row.status}`}>
+                              {rowBooked ? t('status.approved') : rowStatusLabel(row.status, t)}
                             </span>
-                            <em>{holding?.allocationPct ? `${holding.allocationPct.toFixed(2)}%` : t('imports.allocationPending')}</em>
+                            <span>{cashInvested === undefined ? t('imports.investedPending') : money(cashInvested, holding?.currency ?? baseCurrency, locale)}</span>
+                            <em>{holding?.allocationPct === undefined ? t('imports.allocationPending') : allocationPercent(holding.allocationPct)}</em>
                           </div>
                           {row.issues && row.issues.length > 0 ? <p>{row.issues[0]}</p> : null}
                         </article>
@@ -794,6 +808,18 @@ type AllocationItem = {
 
 const palette = ['#335f42', '#6d8f71', '#8fb09d', '#6f8ba3', '#a88498', '#c5c9c2']
 
+function positionMarketValue(position: Position) {
+  return position.marketValue ?? position.costAmount
+}
+
+function positionCashInvested(position: Position) {
+  return position.cashInvested ?? position.costAmount
+}
+
+function positionReturn(position: Position) {
+  return position.unrealizedPnL ?? positionMarketValue(position) - positionCashInvested(position)
+}
+
 function allocation(
   positions: Position[],
   instruments: Map<string, Instrument>,
@@ -801,7 +827,7 @@ function allocation(
 ): AllocationItem[] {
   const totals = new Map<string, number>()
   for (const position of positions) {
-    const value = position.marketValue ?? position.costAmount
+    const value = positionMarketValue(position)
     const label = getLabel(instruments.get(position.instrumentId), position)
     totals.set(label, (totals.get(label) ?? 0) + value)
   }
@@ -811,13 +837,10 @@ function allocation(
     .sort((a, b) => b.value - a.value)
 }
 
-function accountSummary(positions: Position[], cash: CashBalance[], accounts: Map<string, Account>) {
+function accountSummary(positions: Position[], accounts: Map<string, Account>) {
   const totals = new Map<string, number>()
   for (const position of positions) {
-    totals.set(position.accountId, (totals.get(position.accountId) ?? 0) + (position.marketValue ?? position.costAmount))
-  }
-  for (const item of cash) {
-    totals.set(item.accountId, (totals.get(item.accountId) ?? 0) + item.balance)
+    totals.set(position.accountId, (totals.get(position.accountId) ?? 0) + positionMarketValue(position))
   }
   const total = sum([...totals.values()])
   return [...totals.entries()]
@@ -850,7 +873,8 @@ function money(value: number, currency = 'CNY', locale = 'en-US') {
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
-    maximumFractionDigits: 0
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(value)
 }
 
@@ -865,8 +889,18 @@ function number(value?: number, maximumFractionDigits = 4, locale = 'en-US') {
 }
 
 function percent(value: number, total: number) {
-  if (!Number.isFinite(value) || !Number.isFinite(total) || total === 0) return '0.0%'
-  return `${((value / total) * 100).toFixed(1)}%`
+  if (!Number.isFinite(value) || !Number.isFinite(total) || total === 0) return '0.00%'
+  return `${((value / total) * 100).toFixed(2)}%`
+}
+
+function allocationPercent(value: number) {
+  const normalized = Math.abs(value) <= 1 ? value * 100 : value
+  return `${normalized.toFixed(2)}%`
+}
+
+function ratePercent(rate: number | null | undefined) {
+  if (rate === null || rate === undefined || !Number.isFinite(rate)) return '--'
+  return `${(rate * 100).toFixed(2)}%`
 }
 
 function bookedDateLabel(draft: ImportDraft, locale: string) {

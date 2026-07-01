@@ -92,6 +92,14 @@ export type PriceSnapshotEvent = LedgerEventBase & {
   price: number
 }
 
+export type HoldingSnapshotEvent = LedgerEventBase & {
+  type: 'holding_snapshot'
+  instrumentId: string
+  cashInvested?: number
+  marketValue: number
+  unrealizedPnL?: number
+}
+
 export type CorrectionEvent = LedgerEventBase & {
   type: 'correction' | 'reversal'
   targetEventId: string
@@ -107,6 +115,7 @@ export type LedgerEvent =
   | FeeEvent
   | CashTransferEvent
   | PriceSnapshotEvent
+  | HoldingSnapshotEvent
   | CorrectionEvent
 
 export type ImportDraftRow = {
@@ -121,7 +130,12 @@ export type ImportDraftRow = {
     name?: string
     officialName?: string
     fundCode?: string
+    securityCode?: string
+    symbol?: string
+    assetClass?: Instrument['assetClass']
+    market?: string
     currency?: CurrencyCode
+    cashInvested?: number
     marketValue?: number
     holdingPnl?: number
     holdingPnlPct?: number
@@ -168,8 +182,10 @@ export type PositionSummary = {
   costAmount: number
   averageCost: number
   lastPrice: number | null
+  cashInvested: number
   marketValue: number | null
   unrealizedPnL: number | null
+  returnPct: number | null
   realizedPnL: number
   currency: CurrencyCode
 }
@@ -342,6 +358,9 @@ function normalizeLedgerEvent(input: Partial<LedgerEvent>, sourceBatchId: string
   if (!input.type || !input.accountId || !input.currency || !input.occurredAt) {
     throw new Error('Draft event is missing required fields.')
   }
+  if (input.type === 'holding_snapshot' && (!('instrumentId' in input) || !input.instrumentId || typeof input.marketValue !== 'number')) {
+    throw new Error('Holding snapshot rows require instrumentId and marketValue.')
+  }
   return {
     ...input,
     id: input.id || `event_${Date.now()}_${randomUUID().slice(0, 8)}`,
@@ -381,7 +400,7 @@ export async function rebuildDerived(vaultDir = resolveVaultDir()) {
 }
 
 function upsertInstrumentsFromDrafts(config: VaultConfig, drafts: ImportDraft[], timestamp: string) {
-  const knownIds = new Set(config.instruments.map((instrument) => instrument.id))
+  const knownInstruments = new Map(config.instruments.map((instrument) => [instrument.id, instrument]))
   let changed = false
 
   for (const draft of drafts) {
@@ -389,26 +408,51 @@ function upsertInstrumentsFromDrafts(config: VaultConfig, drafts: ImportDraft[],
       const event = row.proposedEvent
       if (!event || !('instrumentId' in event) || !event.instrumentId) continue
 
-      if (knownIds.has(event.instrumentId)) continue
-
       const holding = row.extractedHolding
-      const symbol = holding?.fundCode ?? inferSymbolFromInstrumentId(event.instrumentId)
+      const symbol = holding?.fundCode ?? holding?.securityCode ?? holding?.symbol ?? inferSymbolFromInstrumentId(event.instrumentId)
       const name = holding?.officialName ?? holding?.name ?? symbol ?? event.instrumentId
-      const assetClass = holding?.fundCode ? 'fund' : inferAssetClassFromEvent(event.type)
+      const assetClass = holding?.assetClass ?? inferAssetClassFromHolding(holding, event)
+      const currency = holding?.currency ?? event.currency ?? config.baseCurrency ?? 'CNY'
+      const market = holding?.market ?? (holding?.fundCode && assetClass === 'fund' ? inferFundMarket(holding.fundCode) : undefined)
+      const notes = holding?.matchSource ? `Imported from draft metadata. Source: ${holding.matchSource}.` : 'Imported from draft metadata.'
+      const existing = knownInstruments.get(event.instrumentId)
+
+      if (existing) {
+        const nextSymbol = symbol ?? existing.symbol
+        if (
+          existing.symbol !== nextSymbol ||
+          existing.name !== name ||
+          existing.assetClass !== assetClass ||
+          existing.currency !== currency ||
+          existing.market !== market ||
+          existing.notes !== notes
+        ) {
+          existing.symbol = nextSymbol
+          existing.name = name
+          existing.assetClass = assetClass
+          existing.currency = currency
+          existing.market = market
+          existing.notes = notes
+          existing.updatedAt = timestamp
+          changed = true
+        }
+        continue
+      }
 
       config.instruments.push({
         id: event.instrumentId,
         symbol: symbol ?? event.instrumentId,
         name,
         assetClass,
-        currency: holding?.currency ?? event.currency ?? config.baseCurrency ?? 'CNY',
-        market: holding?.fundCode ? inferFundMarket(holding.fundCode) : undefined,
-        tags: holding?.fundCode ? ['imported'] : undefined,
-        notes: holding?.matchSource ? `Imported from draft metadata. Source: ${holding.matchSource}.` : 'Imported from draft metadata.',
+        currency,
+        market,
+        tags: holding?.fundCode || holding?.securityCode ? ['imported'] : undefined,
+        notes,
         createdAt: timestamp,
         updatedAt: timestamp
       })
-      knownIds.add(event.instrumentId)
+      const instrument = config.instruments[config.instruments.length - 1]
+      if (instrument) knownInstruments.set(instrument.id, instrument)
       changed = true
     }
   }
@@ -424,6 +468,14 @@ function inferSymbolFromInstrumentId(instrumentId: string) {
 function inferAssetClassFromEvent(type?: string): Instrument['assetClass'] {
   if (type === 'opening_balance') return 'cash'
   return 'fund'
+}
+
+function inferAssetClassFromHolding(holding: ImportDraftRow['extractedHolding'], event: Partial<LedgerEvent>): Instrument['assetClass'] {
+  if (holding?.fundCode) return 'fund'
+  const symbol = holding?.securityCode ?? holding?.symbol ?? ('instrumentId' in event ? event.instrumentId : undefined)
+  if (symbol && /^(15|16|18|50|51|52|56|58)\d{4}$/.test(symbol)) return 'etf'
+  if (symbol && /^(00|30|60|68|83|87|88|92)\d{4}$/.test(symbol)) return 'stock'
+  return inferAssetClassFromEvent(event.type)
 }
 
 function inferFundMarket(fundCode: string) {
@@ -471,14 +523,47 @@ function positionKey(event: LedgerEvent & { instrumentId?: string }) {
   return `${event.accountId}:${event.instrumentId}`
 }
 
+function snapshotTimestamp(event: LedgerEvent) {
+  return event.occurredAt || event.createdAt || ''
+}
+
+function positionValue(position: PositionSummary) {
+  return position.marketValue ?? position.costAmount
+}
+
+function deriveSnapshotAmounts(event: HoldingSnapshotEvent) {
+  const marketValue = roundMoney(event.marketValue)
+  const cashInvested = roundMoney(event.cashInvested ?? marketValue - (event.unrealizedPnL ?? 0))
+  const unrealizedPnL = roundMoney(event.unrealizedPnL ?? marketValue - cashInvested)
+  const returnPct = cashInvested === 0 ? null : roundRate(unrealizedPnL / cashInvested)
+
+  return {
+    cashInvested,
+    marketValue,
+    unrealizedPnL,
+    returnPct
+  }
+}
+
 function projectPositions(events: LedgerEvent[]) {
   const positions = new Map<string, PositionSummary>()
   const realizedPnL = new Map<string, number>()
   const lastPrices = new Map<string, number>()
+  const snapshots = new Map<string, { event: HoldingSnapshotEvent; timestamp: string }>()
 
   for (const event of events) {
     if (event.type === 'price_snapshot') {
       lastPrices.set(event.instrumentId, event.price)
+      continue
+    }
+
+    if (event.type === 'holding_snapshot') {
+      const key = positionKey(event)
+      const timestamp = snapshotTimestamp(event)
+      const current = snapshots.get(key)
+      if (!current || timestamp >= current.timestamp) {
+        snapshots.set(key, { event, timestamp })
+      }
       continue
     }
 
@@ -493,8 +578,10 @@ function projectPositions(events: LedgerEvent[]) {
         costAmount: 0,
         averageCost: 0,
         lastPrice: null,
+        cashInvested: 0,
         marketValue: null,
         unrealizedPnL: null,
+        returnPct: null,
         realizedPnL: 0,
         currency: event.currency
       }
@@ -519,22 +606,53 @@ function projectPositions(events: LedgerEvent[]) {
     }
 
     current.averageCost = current.quantity === 0 ? 0 : current.costAmount / current.quantity
+    current.cashInvested = roundMoney(current.costAmount)
     positions.set(key, current)
   }
 
   for (const [key, position] of positions) {
     const lastPrice = lastPrices.get(position.instrumentId) ?? null
-    const marketValue = lastPrice === null ? null : position.quantity * lastPrice
+    const marketValue = lastPrice === null ? null : roundMoney(position.quantity * lastPrice)
+    const cashInvested = roundMoney(position.costAmount)
+    const unrealizedPnL = marketValue === null ? null : roundMoney(marketValue - cashInvested)
     positions.set(key, {
       ...position,
       lastPrice,
+      cashInvested,
       marketValue,
-      unrealizedPnL: marketValue === null ? null : marketValue - position.costAmount,
+      unrealizedPnL,
+      returnPct: unrealizedPnL === null || cashInvested === 0 ? null : roundRate(unrealizedPnL / cashInvested),
       realizedPnL: realizedPnL.get(key) ?? 0
     })
   }
 
-  return [...positions.values()].filter((position) => Math.abs(position.quantity) > 1e-9)
+  for (const [key, snapshot] of snapshots) {
+    const amounts = deriveSnapshotAmounts(snapshot.event)
+    positions.set(key, {
+      instrumentId: snapshot.event.instrumentId,
+      accountId: snapshot.event.accountId,
+      quantity: positions.get(key)?.quantity ?? 0,
+      costAmount: amounts.cashInvested,
+      averageCost: positions.get(key)?.averageCost ?? 0,
+      lastPrice: null,
+      cashInvested: amounts.cashInvested,
+      marketValue: amounts.marketValue,
+      unrealizedPnL: amounts.unrealizedPnL,
+      returnPct: amounts.returnPct,
+      realizedPnL: realizedPnL.get(key) ?? positions.get(key)?.realizedPnL ?? 0,
+      currency: snapshot.event.currency
+    })
+  }
+
+  return [...positions.values()].filter((position) => Math.abs(position.quantity) > 1e-9 || Math.abs(positionValue(position)) > 1e-9 || Math.abs(position.cashInvested) > 1e-9)
+}
+
+function roundMoney(value: number) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100
+}
+
+function roundRate(value: number) {
+  return Math.round((Number(value) + Number.EPSILON) * 10000) / 10000
 }
 
 function projectCash(events: LedgerEvent[]) {

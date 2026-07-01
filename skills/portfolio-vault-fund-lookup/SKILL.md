@@ -9,19 +9,20 @@ Use this before creating or enriching Portfolio Vault drafts that contain Chines
 
 ## Rules
 
-- Match identity first, then NAV. Do not infer shares until code, official name, NAV date, and unit NAV are resolved.
-- Preserve share uncertainty. Account shares are private broker data; when a screenshot lacks shares, write `estimatedShares = marketValue / unitNav` and mark it as estimated.
+- Match identity first. NAV can be recorded as optional audit metadata, but Portfolio Vault does not need NAV to calculate positions.
+- Do not infer shares. Account shares are private broker data and are not part of Portfolio Vault's core amount-based position math.
 - Respect share class. A/C,人民币,美元现汇/现钞,后端,ETF联接,发起式, and Hong Kong R-class labels materially change the code.
 - Keep ambiguous rows as `needs_review`. Never force a low-confidence match into a ready ledger event.
 - Store source and confidence on each row so the user can audit the match later.
 - Do not use general web search for ordinary mainland funds unless the fixed lookup path fails. It is too slow and too noisy.
+- For exchange-traded A-shares and listed ETFs, use `portfolio-vault-security-lookup` instead of this skill.
 
 ## Fast Fixed Lookup Path
 
-Use the bundled script first:
+Use the bundled script first. Pass all fund names in one command for speed:
 
 ```bash
-node skills/portfolio-vault-fund-lookup/scripts/fund-lookup.mjs "国富亚洲机会股票(QDII)C"
+node skills/portfolio-vault-fund-lookup/scripts/fund-lookup.mjs "国富亚洲机会股票(QDII)C" "摩根标普500指数(QDII)C"
 ```
 
 The script uses a local cached fund-code index from Tiantian/Eastmoney and then fetches NAV only for matched candidate codes. This should be the default path for speed.
@@ -72,16 +73,22 @@ Add the fields under `row.extractedHolding`:
   "officialName": "国富亚洲机会股票(QDII)C",
   "navDate": "2026-06-25",
   "unitNav": 3.2554,
-  "estimatedShares": 2167.5032,
-  "estimatedSharesFormula": "marketValue / unitNav",
   "matchSource": "东方财富/天天基金基金档案与净值数据",
   "matchConfidence": 0.98
 }
 ```
 
-When confidence is high enough to review for entry, also create ready rows with `proposedEvent` for:
+When confidence is high enough to review for entry, create one ready row per holding with `proposedEvent.type = "holding_snapshot"`:
 
-- `opening_position`: quantity from estimated shares, cost from broker-reported cost or `marketValue - holdingPnl`
-- `price_snapshot`: unit NAV as the current price for display and unrealized P&L projection
+```json
+{
+  "type": "holding_snapshot",
+  "instrumentId": "021662",
+  "cashInvested": 6600.00,
+  "marketValue": 7056.09,
+  "unrealizedPnL": 456.09,
+  "currency": "CNY"
+}
+```
 
-If actual broker shares later become available, use a correction event rather than silently overwriting the historical opening position.
+If broker-reported shares later become available, store them only as raw/audit metadata unless the user explicitly asks for share tracking.

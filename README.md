@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://github.com/AIDiscovery007/portfolio-vault"><img alt="GitHub repo" src="https://img.shields.io/badge/GitHub-portfolio--vault-111111?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-0.2.0-58735F?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.3.0-58735F?style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-111111?style=flat-square">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-58735F?style=flat-square">
 </p>
@@ -184,6 +184,7 @@ Key principles:
 | `portfolio-vault-open` | Open the local service and dashboard. |
 | `portfolio-vault-admin` | Initialize or reset the vault data directory. |
 | `portfolio-vault-import` | Turn screenshots or CSVs into reviewable import drafts. |
+| `portfolio-vault-position-math` | Apply amount-based holding formulas and batch import row shape. |
 | `portfolio-vault-fund-lookup` | Match Chinese mutual fund names to official codes and NAV data. |
 | `portfolio-vault-query` | Read and summarize accounts, drafts, instruments, positions, and P&L. |
 

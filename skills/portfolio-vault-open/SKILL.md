@@ -23,4 +23,8 @@ The default vault directory is:
 ~/Documents/PortfolioVault
 ```
 
+Always prefer `./scripts/start-vault.sh` over raw `npm run dev`. The script detects an existing Portfolio Vault service on the target port and restarts it, so Codex does not accidentally talk to stale server code after plugin updates. If the port is occupied by a non-Portfolio Vault process, the script exits instead of killing it.
+
+After the service starts, check `http://127.0.0.1:43218/api/health` when doing imports or debugging. The health response includes plugin version, process id, start time, vault path, and capability flags; use it to catch stale services before creating drafts.
+
 When Browser control is available, open the URL in the Codex in-app browser. If browser control is unavailable, give the user the local URL. Do not inspect or mutate the formal ledger just to open the dashboard.

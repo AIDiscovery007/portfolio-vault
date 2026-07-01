@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import readline from 'node:readline'
 
 const SERVER_NAME = 'Portfolio Vault MCP'
-const SERVER_VERSION = '0.2.0'
+const SERVER_VERSION = '0.3.0'
 
 const JsonRpcError = {
   METHOD_NOT_FOUND: -32601,
@@ -141,10 +141,20 @@ function projectPositions(events) {
   const positions = new Map()
   const realizedPnL = new Map()
   const lastPrices = new Map()
+  const snapshots = new Map()
 
   for (const event of events) {
     if (event.type === 'price_snapshot') {
       lastPrices.set(event.instrumentId, event.price)
+      continue
+    }
+    if (event.type === 'holding_snapshot') {
+      const key = `${event.accountId}:${event.instrumentId}`
+      const timestamp = event.occurredAt || event.createdAt || ''
+      const current = snapshots.get(key)
+      if (!current || timestamp >= current.timestamp) {
+        snapshots.set(key, { event, timestamp })
+      }
       continue
     }
     if (!event.instrumentId) continue
@@ -158,8 +168,10 @@ function projectPositions(events) {
         costAmount: 0,
         averageCost: 0,
         lastPrice: null,
+        cashInvested: 0,
         marketValue: null,
         unrealizedPnL: null,
+        returnPct: null,
         realizedPnL: 0,
         currency: event.currency
       }
@@ -181,22 +193,55 @@ function projectPositions(events) {
       realizedPnL.set(key, (realizedPnL.get(key) || 0) + proceeds - soldCost)
     }
     current.averageCost = current.quantity === 0 ? 0 : current.costAmount / current.quantity
+    current.cashInvested = roundMoney(current.costAmount)
     positions.set(key, current)
   }
 
   for (const [key, position] of positions) {
     const lastPrice = lastPrices.get(position.instrumentId) ?? null
-    const marketValue = lastPrice === null ? null : position.quantity * lastPrice
+    const marketValue = lastPrice === null ? null : roundMoney(position.quantity * lastPrice)
+    const cashInvested = roundMoney(position.costAmount)
+    const unrealizedPnL = marketValue === null ? null : roundMoney(marketValue - cashInvested)
     positions.set(key, {
       ...position,
       lastPrice,
+      cashInvested,
       marketValue,
-      unrealizedPnL: marketValue === null ? null : marketValue - position.costAmount,
+      unrealizedPnL,
+      returnPct: unrealizedPnL === null || cashInvested === 0 ? null : roundRate(unrealizedPnL / cashInvested),
       realizedPnL: realizedPnL.get(key) || 0
     })
   }
 
-  return [...positions.values()].filter((position) => Math.abs(position.quantity) > 1e-9)
+  for (const [key, snapshot] of snapshots) {
+    const marketValue = roundMoney(snapshot.event.marketValue)
+    const cashInvested = roundMoney(snapshot.event.cashInvested ?? marketValue - (snapshot.event.unrealizedPnL ?? 0))
+    const unrealizedPnL = roundMoney(snapshot.event.unrealizedPnL ?? marketValue - cashInvested)
+    positions.set(key, {
+      instrumentId: snapshot.event.instrumentId,
+      accountId: snapshot.event.accountId,
+      quantity: positions.get(key)?.quantity ?? 0,
+      costAmount: cashInvested,
+      averageCost: positions.get(key)?.averageCost ?? 0,
+      lastPrice: null,
+      cashInvested,
+      marketValue,
+      unrealizedPnL,
+      returnPct: cashInvested === 0 ? null : roundRate(unrealizedPnL / cashInvested),
+      realizedPnL: realizedPnL.get(key) || positions.get(key)?.realizedPnL || 0,
+      currency: snapshot.event.currency
+    })
+  }
+
+  return [...positions.values()].filter((position) => Math.abs(position.quantity) > 1e-9 || Math.abs(position.marketValue ?? position.costAmount) > 1e-9 || Math.abs(position.cashInvested || 0) > 1e-9)
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100
+}
+
+function roundRate(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 10000) / 10000
 }
 
 function projectCash(events) {

@@ -402,8 +402,8 @@ select {
 
 .table-row {
   display: grid;
-  grid-template-columns: 86px minmax(220px, 1.4fr) minmax(150px, 0.8fr) minmax(120px, 0.5fr) minmax(110px, 0.45fr) 76px;
-  min-height: 44px;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(130px, 0.62fr) minmax(96px, 0.42fr) 72px minmax(130px, 0.62fr);
+  min-height: 52px;
   align-items: center;
   gap: 14px;
   color: #30372f;
@@ -424,6 +424,31 @@ select {
 .symbol {
   color: #20241f;
   font-weight: 700;
+}
+
+.position-identity {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.position-identity strong,
+.position-identity em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-identity strong {
+  color: #20241f;
+  font-weight: 700;
+}
+
+.position-identity em {
+  color: #6f786e;
+  font-size: 11px;
+  font-style: normal;
 }
 
 .muted {
@@ -846,7 +871,7 @@ select {
   }
 
   .table-row {
-    grid-template-columns: 72px minmax(180px, 1fr) minmax(120px, 0.7fr) minmax(110px, 0.5fr) minmax(96px, 0.45fr) 66px;
+    grid-template-columns: minmax(220px, 1fr) minmax(118px, 0.58fr) minmax(92px, 0.42fr) 66px minmax(118px, 0.58fr);
   }
 
   .onboarding {

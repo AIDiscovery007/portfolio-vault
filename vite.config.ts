@@ -8,8 +8,13 @@ import {
   getPortfolioSummary,
   listImportDrafts,
   readConfig,
+  resolveVaultDir,
   saveConfig
 } from './src/server/vault'
+
+const PLUGIN_NAME = 'portfolio-vault'
+const PLUGIN_VERSION = '0.3.0'
+const SERVER_STARTED_AT = new Date().toISOString()
 
 type SseClient = {
   write: (chunk: string) => void
@@ -89,6 +94,32 @@ function portfolioVaultApi(): Plugin {
       server.middlewares.use('/api', async (req, res, next) => {
         try {
           const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+
+          if (req.method === 'GET' && url.pathname === '/health') {
+            const { paths } = await ensureVault()
+            sendJson(res, 200, {
+              ok: true,
+              name: PLUGIN_NAME,
+              version: PLUGIN_VERSION,
+              pid: process.pid,
+              startedAt: SERVER_STARTED_AT,
+              vaultDir: resolveVaultDir(),
+              paths: {
+                config: paths.config,
+                events: paths.events,
+                drafts: paths.drafts,
+                derived: paths.derived,
+                positions: paths.positions
+              },
+              capabilities: {
+                amountBasedPositions: true,
+                holdingSnapshot: true,
+                importDraftApproval: true,
+                vaultEvents: true
+              }
+            })
+            return
+          }
 
           if (req.method === 'GET' && url.pathname === '/vault-events') {
             await startVaultWatch()

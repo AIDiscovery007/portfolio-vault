@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://github.com/AIDiscovery007/portfolio-vault"><img alt="GitHub repo" src="https://img.shields.io/badge/GitHub-portfolio--vault-111111?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-0.2.0-58735F?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.3.0-58735F?style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-111111?style=flat-square">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-58735F?style=flat-square">
 </p>
@@ -184,6 +184,7 @@ PortfolioVault/
 | `portfolio-vault-open` | 打开本地服务和 dashboard。 |
 | `portfolio-vault-admin` | 初始化或重置 vault 数据目录。 |
 | `portfolio-vault-import` | 把截图或 CSV 转成可审核导入草稿。 |
+| `portfolio-vault-position-math` | 固定金额仓位公式和批量导入行结构。 |
 | `portfolio-vault-fund-lookup` | 匹配中国基金名称、官方代码和净值数据。 |
 | `portfolio-vault-query` | 读取并总结账户、草稿、标的、仓位和收益。 |
 

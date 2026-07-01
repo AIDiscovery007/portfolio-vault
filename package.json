@@ -1,6 +1,6 @@
 {
   "name": "portfolio-vault",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -18,7 +18,8 @@
     "preview": "vite preview",
     "check": "tsc -b",
     "vault:init": "node scripts/init-vault.mjs",
-    "vault:reset": "node scripts/reset-vault.mjs"
+    "vault:reset": "node scripts/reset-vault.mjs",
+    "vault:security-lookup": "node skills/portfolio-vault-security-lookup/scripts/security-lookup.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

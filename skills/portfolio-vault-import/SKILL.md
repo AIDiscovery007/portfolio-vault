@@ -14,8 +14,10 @@ Use this workflow for CSV and screenshot/image imports.
 - Preserve uncertainty. Low-confidence account assignment, ambiguous symbols, duplicated-looking trades, and OCR uncertainty must be marked on draft rows.
 - The user approves drafts in the local web UI.
 - Broker-reported positions, cash, floating P&L, and account totals are reconciliation snapshots, not overrides of derived ledger state.
-- For Chinese mutual funds, use `portfolio-vault-fund-lookup` before finalizing the draft rows. Record fund code, official name, NAV date, unit NAV, source, confidence, and estimated shares when the screenshot lacks actual broker shares.
-- When a row creates a `proposedEvent.instrumentId`, include enough row metadata to register that instrument during approval. For fund imports this means `extractedHolding.fundCode`, `officialName`, `currency`, `unitNav`, `navDate`, and `matchSource` when available.
+- For Chinese mutual funds, use `portfolio-vault-fund-lookup` before finalizing the draft rows. Record fund code, official name, source, and confidence. NAV data is optional audit metadata only; do not estimate shares.
+- For mainland A-shares and listed ETFs, use `portfolio-vault-security-lookup` before finalizing draft rows. Record security code, official name, market, asset class, source, and confidence.
+- Use `portfolio-vault-position-math` for holding snapshot formulas and row shape. Portfolio Vault tracks cash invested, return, weight, and current value; shares are not part of the core ledger view.
+- When a row creates a `proposedEvent.instrumentId`, include enough row metadata to register that instrument during approval. For fund imports this means `extractedHolding.fundCode`, `officialName`, `currency`, and `matchSource` when available.
 
 ## Account Preflight
 
@@ -49,7 +51,16 @@ Each row should include:
 - `issues` for unresolved ambiguity
 - `duplicateOf` when a likely duplicate is detected
 
-For high-confidence holding snapshots, create ready review rows with `proposedEvent` for `opening_position` and `price_snapshot`. Keep uncertain rows as `needs_review`.
+For high-confidence holding snapshots, create ready review rows with a single `proposedEvent.type = "holding_snapshot"`. Keep uncertain rows as `needs_review`.
+
+Batch the import for speed:
+
+1. Extract all rows from the source first.
+2. Run fund/security lookup once with all names, not one command per holding.
+3. Build one `rows` array in memory.
+4. Call `create_import_draft` once for the full import.
+
+Do not create one draft per holding and do not call MCP once per row.
 
 Approval automatically registers missing instruments from draft row metadata. If a draft lacks `extractedHolding`/instrument metadata, the formal ledger can still be written but the UI may show an unmapped instrument. Treat missing metadata on a ready row as an import quality issue.
 
