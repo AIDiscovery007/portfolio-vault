@@ -27,4 +27,6 @@ Always prefer `./scripts/start-vault.sh` over raw `npm run dev`. The script dete
 
 After the service starts, check `http://127.0.0.1:43218/api/health` when doing imports or debugging. The health response includes plugin version, process id, start time, vault path, and capability flags; use it to catch stale services before creating drafts.
 
+For screenshot or CSV imports, open or verify the Web UI first, then continue parsing. Drafts, account proposals, and approval state should appear in the UI as the agent prepares them.
+
 When Browser control is available, open the URL in the Codex in-app browser. If browser control is unavailable, give the user the local URL. Do not inspect or mutate the formal ledger just to open the dashboard.

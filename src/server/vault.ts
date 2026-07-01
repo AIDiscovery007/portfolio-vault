@@ -148,6 +148,18 @@ export type ImportDraftRow = {
   }
 }
 
+export type AccountProposal = {
+  id?: string
+  name: string
+  type: Account['type']
+  currency: CurrencyCode
+  institution?: string
+  confidence?: number
+  source?: string
+  status?: 'pending' | 'accepted'
+  confirmedAccountId?: string
+}
+
 export type ImportDraft = {
   id: string
   status: 'draft' | 'approved' | 'rejected'
@@ -155,6 +167,7 @@ export type ImportDraft = {
   sourceFileName?: string
   accountId?: string
   accountConfidence?: number
+  accountProposal?: AccountProposal
   rows: ImportDraftRow[]
   approvedAt?: string
   createdAt: string
@@ -338,7 +351,7 @@ export async function approveImportDraft(draftId: string, vaultDir = resolveVaul
 
   const events = draft.rows
     .filter((row) => row.status === 'ready' && row.proposedEvent)
-    .map((row) => normalizeLedgerEvent(row.proposedEvent!, draft.id))
+    .map((row) => normalizeLedgerEvent(withDraftAccount(row.proposedEvent!, draft), draft.id))
 
   if (events.length === 0) throw new Error('No ready rows are available to approve.')
 
@@ -352,6 +365,92 @@ export async function approveImportDraft(draftId: string, vaultDir = resolveVaul
   await writeJsonAtomic(draftPath, approved)
   await rebuildDerived(vaultDir)
   return approved
+}
+
+export async function confirmImportDraftAccount(draftId: string, vaultDir = resolveVaultDir()) {
+  const { paths: p } = await ensureVault(vaultDir)
+  const draftPath = join(p.drafts, `${basename(draftId)}.json`)
+  const draft = await readJson<ImportDraft | null>(draftPath, null)
+  if (!draft) throw new Error(`Import draft not found: ${draftId}`)
+  if (draft.status !== 'draft') throw new Error(`Import draft is not pending: ${draftId}`)
+  if (!draft.accountProposal) throw new Error('Import draft has no account proposal.')
+
+  const timestamp = now()
+  const config = await readConfig(vaultDir)
+  const accountId = draft.accountId ?? draft.accountProposal.confirmedAccountId ?? draft.accountProposal.id ?? nextAccountId(config, draft.accountProposal)
+  let account = config.accounts.find((item) => item.id === accountId)
+
+  if (!account) {
+    account = {
+      id: accountId,
+      name: draft.accountProposal.name,
+      type: draft.accountProposal.type,
+      currency: draft.accountProposal.currency,
+      institution: draft.accountProposal.institution,
+      createdAt: timestamp
+    }
+    config.accounts.push(account)
+  }
+
+  if (!config.baseCurrency) config.baseCurrency = account.currency
+  await saveConfig(config, vaultDir)
+
+  const updatedDraft: ImportDraft = {
+    ...draft,
+    accountId: account.id,
+    accountConfidence: draft.accountProposal.confidence ?? draft.accountConfidence ?? 1,
+    accountProposal: {
+      ...draft.accountProposal,
+      status: 'accepted',
+      confirmedAccountId: account.id
+    },
+    rows: draft.rows.map((row) => ({
+      ...row,
+      proposedEvent: row.proposedEvent ? withAccountOnProposedEvent(row.proposedEvent, account) : row.proposedEvent
+    })),
+    updatedAt: timestamp
+  }
+
+  await writeJsonAtomic(draftPath, updatedDraft)
+  await rebuildDerived(vaultDir)
+  return { draft: updatedDraft, account }
+}
+
+function withDraftAccount(input: Partial<LedgerEvent>, draft: ImportDraft) {
+  const accountId = ('accountId' in input && input.accountId) || draft.accountId
+  if (!accountId) throw new Error('Confirm the draft account before approving.')
+  return {
+    ...input,
+    accountId
+  } as Partial<LedgerEvent>
+}
+
+function withAccountOnProposedEvent(input: Partial<LedgerEvent>, account: Account) {
+  return {
+    ...input,
+    accountId: ('accountId' in input && input.accountId) || account.id,
+    currency: input.currency ?? account.currency
+  } as Partial<LedgerEvent>
+}
+
+function nextAccountId(config: VaultConfig, proposal: AccountProposal) {
+  const base = normalizeAccountId(proposal.id) ?? normalizeAccountId(`${proposal.type}-${proposal.name}`) ?? `${proposal.type}-${randomUUID().slice(0, 8)}`
+  let candidate = base
+  let suffix = 2
+  const knownIds = new Set(config.accounts.map((account) => account.id))
+  while (knownIds.has(candidate)) {
+    candidate = `${base}-${suffix}`
+    suffix += 1
+  }
+  return candidate
+}
+
+function normalizeAccountId(value?: string) {
+  const normalized = value
+    ?.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return normalized || null
 }
 
 function normalizeLedgerEvent(input: Partial<LedgerEvent>, sourceBatchId: string): LedgerEvent {

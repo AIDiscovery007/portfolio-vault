@@ -9,16 +9,14 @@ const resources = {
   en: {
     translation: {
       nav: {
-        overview: 'Overview',
-        positions: 'Positions',
-        imports: 'Imports',
+        home: 'Home',
+        imports: 'Review drafts',
         settings: 'Settings',
         navigation: 'Portfolio navigation'
       },
       actions: {
         search: 'Search',
         refresh: 'Refresh',
-        filter: 'Filter',
         cancel: 'Cancel',
         language: 'Language',
         switchToEnglish: 'Switch to English',
@@ -33,20 +31,16 @@ const resources = {
         totalNetValue: 'Current net value',
         cashInvested: 'Cash invested',
         totalReturn: 'Total return',
-        pendingDrafts: 'Pending drafts',
         loading: 'Reading local vault',
         latestSnapshot: 'Latest local snapshot',
-        amountBasis: 'Amount basis',
-        needsReview: 'Needs review'
+        amountBasis: 'Amount basis'
       },
       panels: {
         assetExposure: 'Asset exposure',
         accounts: 'Accounts',
-        currencies: 'Currencies',
         positionsCount: '{{count}} position',
         positionsCount_other: '{{count}} positions',
         emptyAccounts: 'No accounts yet',
-        emptyCurrencies: 'No currency exposure yet',
         emptyExposure: 'No exposure yet',
         noAllocationYet: 'No allocation yet',
         allocationBar: 'Allocation bar'
@@ -66,7 +60,6 @@ const resources = {
         aria: 'Core positions',
         title: 'Core positions',
         overviewMode: 'Review totals, exposure, and concentration.',
-        positionsMode: 'Focus on current formal positions.',
         filterByAccount: 'Filter by account',
         allAccounts: 'All accounts',
         headers: {
@@ -101,7 +94,15 @@ const resources = {
         approve: 'Approve',
         approved: 'Booked',
         approving: 'Booking',
-        needsCompletion: 'Needs details'
+        needsCompletion: 'Needs details',
+        accountPending: 'Account pending',
+        accountReady: 'Account ready',
+        accountProposal: 'Account proposal',
+        accountConfirmed: 'Account confirmed',
+        accountConfirmedShort: 'Confirmed',
+        confirmAccount: 'Confirm account',
+        confirmingAccount: 'Confirming',
+        confirmAccountFirst: 'Confirm account first'
       },
       approveDialog: {
         title: 'Confirm booking',
@@ -127,22 +128,26 @@ const resources = {
         stock: 'Stock',
         cash: 'Cash',
         other: 'Other'
+      },
+      accountTypes: {
+        brokerage: 'Brokerage',
+        cash: 'Cash',
+        fund: 'Fund platform',
+        other: 'Other'
       }
     }
   },
   'zh-CN': {
     translation: {
       nav: {
-        overview: '概览',
-        positions: '仓位',
-        imports: '导入',
+        home: '首页',
+        imports: '审核草稿',
         settings: '设置',
         navigation: 'Portfolio 导航'
       },
       actions: {
         search: '搜索',
         refresh: '刷新',
-        filter: '筛选',
         cancel: '取消',
         language: '语言',
         switchToEnglish: '切换到英文',
@@ -157,20 +162,16 @@ const resources = {
         totalNetValue: '当前总净值',
         cashInvested: '投入现金',
         totalReturn: '总收益',
-        pendingDrafts: '待审草稿',
         loading: '读取本地 vault',
         latestSnapshot: '本地最新快照',
-        amountBasis: '金额口径',
-        needsReview: '需要审核'
+        amountBasis: '金额口径'
       },
       panels: {
         assetExposure: '资产暴露',
         accounts: '账户',
-        currencies: '币种',
         positionsCount: '{{count}} 个仓位',
         positionsCount_other: '{{count}} 个仓位',
         emptyAccounts: '暂无账户',
-        emptyCurrencies: '暂无币种暴露',
         emptyExposure: '暂无暴露',
         noAllocationYet: '暂无配置',
         allocationBar: '配置条'
@@ -190,7 +191,6 @@ const resources = {
         aria: '核心仓位',
         title: '核心仓位',
         overviewMode: '看总额、暴露和集中度。',
-        positionsMode: '聚焦当前正式仓位。',
         filterByAccount: '按账户筛选',
         allAccounts: '全部账户',
         headers: {
@@ -225,7 +225,15 @@ const resources = {
         approve: '批准入账',
         approved: '已入账',
         approving: '入账中',
-        needsCompletion: '待补齐'
+        needsCompletion: '待补齐',
+        accountPending: '账户待确认',
+        accountReady: '账户已确认',
+        accountProposal: '账户提案',
+        accountConfirmed: '账户已确认',
+        accountConfirmedShort: '已确认',
+        confirmAccount: '确认账户',
+        confirmingAccount: '确认中',
+        confirmAccountFirst: '先确认账户'
       },
       approveDialog: {
         title: '确认入账',
@@ -251,6 +259,12 @@ const resources = {
         stock: '股票',
         cash: '现金',
         other: '其他'
+      },
+      accountTypes: {
+        brokerage: '证券账户',
+        cash: '现金账户',
+        fund: '基金平台',
+        other: '其他账户'
       }
     }
   }

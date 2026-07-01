@@ -2,19 +2,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import type { TFunction } from 'i18next'
 import {
-  ArrowDownToLine,
   CalendarDays,
   ChevronDown,
   CheckCircle2,
   CircleDollarSign,
   Gauge,
-  Grid2X2,
   Landmark,
   LayoutList,
   RefreshCw,
   Search,
   Settings,
-  SlidersHorizontal,
   Upload,
   WalletCards
 } from 'lucide-react'
@@ -61,6 +58,18 @@ type CashBalance = {
   accountId: string
   currency: string
   balance: number
+}
+
+type AccountProposal = {
+  id?: string
+  name: string
+  type: 'brokerage' | 'cash' | 'fund' | 'other'
+  currency: string
+  institution?: string
+  confidence?: number
+  source?: string
+  status?: 'pending' | 'accepted'
+  confirmedAccountId?: string
 }
 
 type PortfolioSummary = {
@@ -116,6 +125,7 @@ type ImportDraft = {
   sourceFileName?: string
   accountId?: string
   accountConfidence?: number
+  accountProposal?: AccountProposal
   rows: DraftRow[]
   approvedAt?: string
   approvalAssumptions?: {
@@ -125,13 +135,7 @@ type ImportDraft = {
   updatedAt: string
 }
 
-type ViewMode = 'overview' | 'positions' | 'imports'
-
-const navItems = [
-  { id: 'overview' as const, icon: Grid2X2, labelKey: 'nav.overview' },
-  { id: 'positions' as const, icon: LayoutList, labelKey: 'nav.positions' },
-  { id: 'imports' as const, icon: Upload, labelKey: 'nav.imports' }
-]
+type ViewMode = 'home' | 'imports'
 
 const emptySummary: PortfolioSummary = {
   vaultDir: '/Users/qiaochao/Documents/PortfolioVault',
@@ -149,11 +153,12 @@ function App() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null)
   const [drafts, setDrafts] = useState<ImportDraft[]>([])
   const [loading, setLoading] = useState(true)
-  const [mode, setMode] = useState<ViewMode>('overview')
+  const [mode, setMode] = useState<ViewMode>('home')
   const [accountFilter, setAccountFilter] = useState('all')
   const [queryOpen, setQueryOpen] = useState(false)
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null)
   const [approvingDraftId, setApprovingDraftId] = useState<string | null>(null)
+  const [confirmingAccountDraftId, setConfirmingAccountDraftId] = useState<string | null>(null)
   const [confirmingDraft, setConfirmingDraft] = useState<ImportDraft | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -215,6 +220,7 @@ function App() {
   }, [drafts, expandedDraftId])
 
   const data = summary ?? emptySummary
+
   const language = resolvedLanguage(i18n.resolvedLanguage)
   const locale = localeForLanguage(language)
   const baseCurrency = data.baseCurrency ?? inferDisplayCurrency(data) ?? 'CNY'
@@ -229,7 +235,6 @@ function App() {
   const totalInvested = sum(data.positions.map(positionCashInvested))
   const totalReturn = sum(data.positions.map(positionReturn))
   const assetAllocation = allocation(data.positions, instruments, (instrument) => labelAssetClass(instrument?.assetClass, t))
-  const currencyAllocation = allocation(data.positions, instruments, (instrument, position) => instrument?.currency ?? position.currency)
   const accountAllocation = accountSummary(data.positions, accounts)
   const topPositions = filteredPositions.slice(0, 8)
   const isEmpty = !hasPortfolioData(data) && drafts.length === 0
@@ -253,30 +258,36 @@ function App() {
     }
   }
 
+  async function confirmDraftAccount(draft: ImportDraft) {
+    setConfirmingAccountDraftId(draft.id)
+    setActionError(null)
+    try {
+      const response = await fetch(`/api/drafts/${encodeURIComponent(draft.id)}/account/confirm`, { method: 'POST' })
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(payload?.error ?? `Account confirmation failed: ${response.status}`)
+      }
+      await loadVaultState(true)
+      return true
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+      return false
+    } finally {
+      setConfirmingAccountDraftId(null)
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="rail" aria-label={t('nav.navigation')}>
-        <div className="brand-mark" title="Portfolio Vault">
+        <button className={`brand-mark ${mode === 'home' ? 'active' : ''}`} type="button" title={t('nav.home')} aria-label={t('nav.home')} onClick={() => setMode('home')}>
           <span className="brand-mark-image" aria-hidden="true" />
-        </div>
+        </button>
         <nav>
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const label = t(item.labelKey)
-            return (
-              <button
-                key={item.id}
-                className={mode === item.id ? 'active' : ''}
-                type="button"
-                title={label}
-                aria-label={label}
-                onClick={() => setMode(item.id)}
-              >
-                <Icon size={19} strokeWidth={1.65} />
-                {item.id === 'imports' && data.pendingDraftCount > 0 ? <span className="pin">{data.pendingDraftCount}</span> : null}
-              </button>
-            )
-          })}
+          <button className={mode === 'imports' ? 'active' : ''} type="button" title={t('nav.imports')} aria-label={t('nav.imports')} onClick={() => setMode('imports')}>
+            <Upload size={19} strokeWidth={1.65} />
+            {data.pendingDraftCount > 0 ? <span className="pin">{data.pendingDraftCount}</span> : null}
+          </button>
         </nav>
         <button className="rail-bottom" type="button" title={t('nav.settings')} aria-label={t('nav.settings')}>
           <Settings size={19} strokeWidth={1.65} />
@@ -308,34 +319,32 @@ function App() {
           </label>
         ) : null}
 
-        {isEmpty ? (
+        {isEmpty && mode === 'home' ? (
           <Onboarding t={t} />
         ) : (
           <>
-            <section className="metrics" aria-label={t('metrics.summary')}>
-              <Metric icon={CircleDollarSign} label={t('metrics.totalNetValue')} value={money(totalNetValue, baseCurrency, locale)} detail={loading ? t('metrics.loading') : t('metrics.latestSnapshot')} />
-              <Metric icon={WalletCards} label={t('metrics.cashInvested')} value={money(totalInvested, baseCurrency, locale)} detail={t('metrics.amountBasis')} />
-              <Metric icon={Gauge} label={t('metrics.totalReturn')} value={signedMoney(totalReturn, baseCurrency, locale)} detail={ratePercent(totalInvested === 0 ? null : totalReturn / totalInvested)} tone={totalReturn >= 0 ? 'good' : 'bad'} />
-              <Metric icon={ArrowDownToLine} label={t('metrics.pendingDrafts')} value={String(data.pendingDraftCount)} detail={t('metrics.needsReview')} tone={data.pendingDraftCount > 0 ? 'warn' : 'neutral'} />
-            </section>
+            {!isEmpty ? (
+              <>
+                <section className="metrics" aria-label={t('metrics.summary')}>
+                  <Metric icon={CircleDollarSign} label={t('metrics.totalNetValue')} value={money(totalNetValue, baseCurrency, locale)} detail={loading ? t('metrics.loading') : t('metrics.latestSnapshot')} />
+                  <Metric icon={WalletCards} label={t('metrics.cashInvested')} value={money(totalInvested, baseCurrency, locale)} detail={t('metrics.amountBasis')} />
+                  <Metric icon={Gauge} label={t('metrics.totalReturn')} value={signedMoney(totalReturn, baseCurrency, locale)} detail={ratePercent(totalInvested === 0 ? null : totalReturn / totalInvested)} tone={totalReturn >= 0 ? 'good' : 'bad'} />
+                </section>
 
-            <section className="focus-grid">
-              <article className="exposure-panel">
-                <PanelHeading icon={Gauge} title={t('panels.assetExposure')} subtitle={t('panels.positionsCount', { count: data.positions.length })} />
-                <StackBar items={assetAllocation} />
-                <AllocationList items={assetAllocation} t={t} />
-              </article>
+                <section className="focus-grid">
+                  <article className="exposure-panel">
+                    <PanelHeading icon={Gauge} title={t('panels.assetExposure')} subtitle={t('panels.positionsCount', { count: data.positions.length })} />
+                    <StackBar items={assetAllocation} />
+                    <AllocationList items={assetAllocation} t={t} />
+                  </article>
 
-              <article className="side-panel">
-                <PanelHeading icon={Landmark} title={t('panels.accounts')} />
-                <CompactList items={accountAllocation.slice(0, 4)} emptyText={t('panels.emptyAccounts')} currency={baseCurrency} locale={locale} />
-              </article>
-
-              <article className="side-panel">
-                <PanelHeading icon={CircleDollarSign} title={t('panels.currencies')} />
-                <CompactList items={currencyAllocation.slice(0, 4)} emptyText={t('panels.emptyCurrencies')} currency={baseCurrency} locale={locale} />
-              </article>
-            </section>
+                  <article className="side-panel">
+                    <PanelHeading icon={Landmark} title={t('panels.accounts')} />
+                    <CompactList items={accountAllocation.slice(0, 4)} emptyText={t('panels.emptyAccounts')} currency={baseCurrency} locale={locale} />
+                  </article>
+                </section>
+              </>
+            ) : null}
 
             {mode === 'imports' ? (
               <DraftReviewSection
@@ -344,12 +353,14 @@ function App() {
                 approvingDraftId={approvingDraftId}
                 actionError={actionError}
                 baseCurrency={baseCurrency}
+                confirmingAccountDraftId={confirmingAccountDraftId}
                 locale={locale}
                 t={t}
+                onConfirmAccount={confirmDraftAccount}
                 onToggleDraft={(draftId) => setExpandedDraftId((current) => (current === draftId ? null : draftId))}
                 onRequestApprove={setConfirmingDraft}
               />
-            ) : (
+            ) : !isEmpty ? (
               <PositionsSection
                 accounts={accounts}
                 accountFilter={accountFilter}
@@ -359,11 +370,10 @@ function App() {
                 totalNetValue={totalNetValue}
                 locale={locale}
                 allAccounts={data.accounts}
-                mode={mode}
                 t={t}
                 onAccountFilterChange={setAccountFilter}
               />
-            )}
+            ) : null}
           </>
         )}
       </section>
@@ -467,7 +477,6 @@ function PositionsSection({
   baseCurrency,
   instruments,
   locale,
-  mode,
   positions,
   t,
   totalNetValue,
@@ -479,7 +488,6 @@ function PositionsSection({
   baseCurrency: string
   instruments: Map<string, Instrument>
   locale: string
-  mode: ViewMode
   positions: Position[]
   t: TFunction
   totalNetValue: number
@@ -490,7 +498,7 @@ function PositionsSection({
       <div className="section-title-row">
         <div>
           <h2>{t('positions.title')}</h2>
-          <p>{modeLabel(mode, t)}</p>
+          <p>{t('positions.overviewMode')}</p>
         </div>
         <div className="table-tools">
           <select value={accountFilter} aria-label={t('positions.filterByAccount')} onChange={(event) => onAccountFilterChange(event.target.value)} disabled={allAccounts.length === 0}>
@@ -501,9 +509,6 @@ function PositionsSection({
               </option>
             ))}
           </select>
-          <button className="icon-button" type="button" title={t('actions.filter')} aria-label={t('actions.filter')}>
-            <SlidersHorizontal size={17} strokeWidth={1.7} />
-          </button>
         </div>
       </div>
 
@@ -552,8 +557,10 @@ function DraftReviewSection({
   approvingDraftId,
   actionError,
   baseCurrency,
+  confirmingAccountDraftId,
   locale,
   t,
+  onConfirmAccount,
   onToggleDraft,
   onRequestApprove
 }: {
@@ -562,8 +569,10 @@ function DraftReviewSection({
   approvingDraftId: string | null
   actionError: string | null
   baseCurrency: string
+  confirmingAccountDraftId: string | null
   locale: string
   t: TFunction
+  onConfirmAccount: (draft: ImportDraft) => void
   onToggleDraft: (draftId: string) => void
   onRequestApprove: (draft: ImportDraft) => void
 }) {
@@ -593,7 +602,8 @@ function DraftReviewSection({
           const isExpanded = expandedDraftId === draft.id
           const holdingRows = draft.rows.filter((row) => row.extractedHolding)
           const displayRows = holdingRows.length > 0 ? holdingRows : draft.rows
-          const canApprove = draft.status === 'draft' && draft.rows.some((row) => row.status === 'ready' && row.proposedEvent)
+          const accountPending = needsAccountConfirmation(draft)
+          const canApprove = !accountPending && draft.status === 'draft' && draft.rows.some((row) => row.status === 'ready' && row.proposedEvent)
           const bookedDate = bookedDateLabel(draft, locale)
 
           return (
@@ -607,6 +617,7 @@ function DraftReviewSection({
                       <CalendarDays size={12} strokeWidth={1.7} />
                       {bookedDate ? t('imports.bookedDate', { date: bookedDate }) : t('imports.notBooked')}
                     </span>
+                    {accountPending ? <span>{t('imports.accountPending')}</span> : draft.accountId ? <span>{t('imports.accountReady')}</span> : null}
                   </span>
                 </span>
                 <span className="import-card-metrics" aria-label={t('imports.summary')}>
@@ -629,6 +640,15 @@ function DraftReviewSection({
               {isExpanded ? (
                 <div className="import-card-body">
                   {actionError ? <p className="action-error">{actionError}</p> : null}
+
+                  {draft.accountProposal ? (
+                    <AccountProposalCard
+                      draft={draft}
+                      confirming={confirmingAccountDraftId === draft.id}
+                      t={t}
+                      onConfirm={() => onConfirmAccount(draft)}
+                    />
+                  ) : null}
 
                   <div className="draft-row-list">
                     {displayRows.map((row) => {
@@ -667,7 +687,7 @@ function DraftReviewSection({
                   <div className="import-card-actions">
                     <button className="approve-button" type="button" disabled={!canApprove || approvingDraftId === draft.id} onClick={() => onRequestApprove(draft)}>
                       <CheckCircle2 size={16} strokeWidth={1.75} />
-                      {draft.status === 'approved' ? t('imports.approved') : approvingDraftId === draft.id ? t('imports.approving') : canApprove ? t('imports.approve') : t('imports.needsCompletion')}
+                      {draft.status === 'approved' ? t('imports.approved') : accountPending ? t('imports.confirmAccountFirst') : approvingDraftId === draft.id ? t('imports.approving') : canApprove ? t('imports.approve') : t('imports.needsCompletion')}
                     </button>
                   </div>
                 </div>
@@ -676,6 +696,43 @@ function DraftReviewSection({
           )
         })}
       </div>
+    </section>
+  )
+}
+
+function AccountProposalCard({
+  draft,
+  confirming,
+  t,
+  onConfirm
+}: {
+  draft: ImportDraft
+  confirming: boolean
+  t: TFunction
+  onConfirm: () => void
+}) {
+  const proposal = draft.accountProposal
+  if (!proposal) return null
+  const confirmed = !needsAccountConfirmation(draft)
+  return (
+    <section className={`account-proposal ${confirmed ? 'confirmed' : ''}`} aria-label={t('imports.accountProposal')}>
+      <WalletCards size={18} strokeWidth={1.7} />
+      <div>
+        <span>{confirmed ? t('imports.accountConfirmed') : t('imports.accountProposal')}</span>
+        <strong>{proposal.name}</strong>
+        <em>
+          {accountTypeLabel(proposal.type, t)} · {proposal.currency}
+          {proposal.institution ? ` · ${proposal.institution}` : ''}
+        </em>
+      </div>
+      {confirmed ? (
+        <span className="row-state ready">{t('imports.accountConfirmedShort')}</span>
+      ) : (
+        <button className="approve-button" type="button" disabled={confirming} onClick={onConfirm}>
+          <CheckCircle2 size={16} strokeWidth={1.75} />
+          {confirming ? t('imports.confirmingAccount') : t('imports.confirmAccount')}
+        </button>
+      )}
     </section>
   )
 }
@@ -860,9 +917,15 @@ function labelAssetClass(assetClass: string | undefined, t: TFunction) {
   return t('assetClass.other')
 }
 
-function modeLabel(mode: ViewMode, t: TFunction) {
-  if (mode === 'positions') return t('positions.positionsMode')
-  return t('positions.overviewMode')
+function needsAccountConfirmation(draft: ImportDraft) {
+  return draft.status === 'draft' && Boolean(draft.accountProposal) && draft.accountProposal?.status !== 'accepted' && !draft.accountId
+}
+
+function accountTypeLabel(type: AccountProposal['type'], t: TFunction) {
+  if (type === 'brokerage') return t('accountTypes.brokerage')
+  if (type === 'cash') return t('accountTypes.cash')
+  if (type === 'fund') return t('accountTypes.fund')
+  return t('accountTypes.other')
 }
 
 function sum(values: number[]) {

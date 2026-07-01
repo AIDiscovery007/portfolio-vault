@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import readline from 'node:readline'
 
 const SERVER_NAME = 'Portfolio Vault MCP'
-const SERVER_VERSION = '0.3.0'
+const SERVER_VERSION = '0.4.0'
 
 const JsonRpcError = {
   METHOD_NOT_FOUND: -32601,
@@ -129,6 +129,7 @@ async function createImportDraft(input, vaultDir) {
     sourceFileName: input.sourceFileName,
     accountId: input.accountId,
     accountConfidence: input.accountConfidence,
+    accountProposal: input.accountProposal,
     rows: Array.isArray(input.rows) ? input.rows : [],
     createdAt: timestamp,
     updatedAt: timestamp
@@ -331,6 +332,20 @@ function toolDefinitions() {
           sourceFileName: { type: 'string' },
           accountId: { type: 'string' },
           accountConfidence: { type: 'number' },
+          accountProposal: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              type: { type: 'string', enum: ['brokerage', 'cash', 'fund', 'other'] },
+              currency: { type: 'string' },
+              institution: { type: 'string' },
+              confidence: { type: 'number' },
+              source: { type: 'string' }
+            },
+            required: ['name', 'type', 'currency'],
+            additionalProperties: true
+          },
           rows: {
             type: 'array',
             items: {

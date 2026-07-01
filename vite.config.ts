@@ -3,6 +3,7 @@ import { defineConfig, type Plugin } from 'vite'
 import { watch, type FSWatcher } from 'node:fs'
 import {
   approveImportDraft,
+  confirmImportDraftAccount,
   createImportDraft,
   ensureVault,
   getPortfolioSummary,
@@ -169,6 +170,15 @@ function portfolioVaultApi(): Plugin {
             const body = JSON.parse(await readBody(req))
             const draft = await createImportDraft(body)
             sendJson(res, 201, draft)
+            queueVaultChanged('drafts')
+            return
+          }
+
+          if (req.method === 'POST' && url.pathname.startsWith('/drafts/') && url.pathname.endsWith('/account/confirm')) {
+            const draftId = decodeURIComponent(url.pathname.slice('/drafts/'.length, -'/account/confirm'.length))
+            const result = await confirmImportDraftAccount(draftId)
+            sendJson(res, 200, result)
+            queueVaultChanged('config')
             queueVaultChanged('drafts')
             return
           }

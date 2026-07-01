@@ -9,6 +9,7 @@ Use this workflow for CSV and screenshot/image imports.
 
 ## Rules
 
+- Start or verify the local Web UI before parsing a non-trivial import. The user should see Portfolio Vault early, even if the draft is not ready yet.
 - Create an import draft only. Do not append to the formal ledger.
 - Resolve account ownership before creating the draft. A draft must not be created with missing or guessed account ownership.
 - Preserve uncertainty. Low-confidence account assignment, ambiguous symbols, duplicated-looking trades, and OCR uncertainty must be marked on draft rows.
@@ -23,21 +24,39 @@ Use this workflow for CSV and screenshot/image imports.
 
 Run this before parsing rows into a draft:
 
-1. Read the vault config and list existing accounts.
-2. If the user explicitly named an account, use that account. If it does not exist, propose creating it and wait for confirmation before continuing.
-3. If no accounts exist:
+1. Start the local Web UI with `portfolio-vault-open` and verify `/api/health`.
+2. Read the vault config and list existing accounts.
+3. If the user explicitly named an account, use that account. If it does not exist, create an account proposal and let the user confirm it in the Web UI before approval.
+4. If no accounts exist:
    - infer a concise account from the source, such as `支付宝基金`, `富途证券`, `华泰证券`, or the broker/file label shown in the screenshot
    - choose `type = fund` for platform fund holdings, `brokerage` for brokerage accounts, `cash` for cash-only imports, otherwise `other`
    - infer currency from the import; use `CNY` for mainland fund platform screenshots unless the source says otherwise
-   - ask the user to confirm the proposed account name/type/currency before creating the draft
-   - after confirmation, create the account in config and use its id on the draft and every proposed event
-4. If accounts already exist and the user did not specify one:
+   - attach this as `draft.accountProposal`
+   - leave `draft.accountId` empty until the user confirms the proposal in the Web UI
+   - omit `proposedEvent.accountId` on ready rows when the account is still pending; the Web UI confirmation will bind the account to the draft and rows
+5. If accounts already exist and the user did not specify one:
    - match the source against existing account names, institutions, and account mappings
-   - when there is one high-confidence match, show the match and ask for confirmation before import
-   - when confidence is low or multiple accounts match, ask the user to choose before import
-5. Add or update an `accountMappings` entry only after the user confirms the account assignment.
+   - when there is one high-confidence match, use that account and include it on the draft and proposed events
+   - when confidence is low or multiple accounts match, create a draft only after the user chooses the account or after you attach a clear account proposal for Web UI confirmation
+6. Add or update an `accountMappings` entry only after the user confirms the account assignment.
 
-Do not create the import draft until this preflight is complete. If confirmation is missing, stop with a concise account proposal instead of producing a partial draft.
+A draft with `accountProposal` is allowed, but it must not be approvable until the proposal is confirmed in the Web UI.
+
+Account proposal shape:
+
+```json
+{
+  "accountProposal": {
+    "id": "cms-66-060",
+    "name": "招商证券 66***060",
+    "type": "brokerage",
+    "currency": "CNY",
+    "institution": "招商证券",
+    "confidence": 0.9,
+    "source": "broker screenshot"
+  }
+}
+```
 
 ## Draft Rows
 
