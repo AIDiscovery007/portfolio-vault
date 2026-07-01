@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import readline from 'node:readline'
 
 const SERVER_NAME = 'Portfolio Vault MCP'
-const SERVER_VERSION = '0.4.0'
+const SERVER_VERSION = '0.4.1'
 
 const JsonRpcError = {
   METHOD_NOT_FOUND: -32601,

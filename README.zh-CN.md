@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://github.com/AIDiscovery007/portfolio-vault"><img alt="GitHub repo" src="https://img.shields.io/badge/GitHub-portfolio--vault-111111?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-0.4.0-58735F?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.4.1-58735F?style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-111111?style=flat-square">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-58735F?style=flat-square">
 </p>

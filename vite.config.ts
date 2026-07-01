@@ -14,7 +14,7 @@ import {
 } from './src/server/vault'
 
 const PLUGIN_NAME = 'portfolio-vault'
-const PLUGIN_VERSION = '0.3.0'
+const PLUGIN_VERSION = '0.4.1'
 const SERVER_STARTED_AT = new Date().toISOString()
 
 type SseClient = {

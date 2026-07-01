@@ -1,6 +1,6 @@
 {
   "name": "portfolio-vault",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A local-first Codex plugin for recording, importing, auditing, and reviewing personal investment positions.",
   "author": {
     "name": "Qiaochao"
